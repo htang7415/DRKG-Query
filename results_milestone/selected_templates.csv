@@ -1,0 +1,2 @@
+template,family,edge_count,pattern,types,grounded,anchors
+T1,path,2,HumGenHumGen -> HumGenHumGen,Gene:Gene -> Gene:Gene,5163435,2022

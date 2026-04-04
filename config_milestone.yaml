@@ -1,0 +1,156 @@
+project:
+  name: drkg_neo4j_vs_postgres_milestone
+  random_seed: 784
+
+paths:
+  requirements_file: requirements.txt
+  venv_dir: /tmp/drkg_neo4j_vs_postgres_venv
+  raw_drkg: data/drkg.tsv
+  relation_glossary: data/relation_glossary.tsv
+  entity2src: data/entity2src.tsv
+  preprocess_work_dir: /tmp/drkg_prepare_milestone
+  results_dir: results_milestone
+  setup_dir: results_milestone/01_setup
+  prepare_dir: results_milestone/02_prepare
+  experiments_dir: results_milestone/03_experiments
+  analysis_dir: results_milestone/04_summary
+  final_dir: results_milestone/05_unused
+  env_dir: results_milestone/01_setup
+  preprocess_dir: results_milestone/02_prepare/preprocess
+  load_postgres_dir: results_milestone/02_prepare/load_postgres
+  load_neo4j_dir: results_milestone/02_prepare/load_neo4j
+  template_mining_dir: results_milestone/02_prepare/template_mining
+  bindings_dir: results_milestone/02_prepare/bindings
+  prepare_figures_dir: results_milestone/02_prepare/figures
+  postgres_baseline_dir: results_milestone/03_experiments/postgres_baseline
+  neo4j_baseline_dir: results_milestone/03_experiments/unused_neo4j
+  comparison_dir: results_milestone/03_experiments/unused_comparison
+  join_order_dir: results_milestone/03_experiments/unused_join_order
+  experiments_figures_dir: results_milestone/03_experiments/figures
+  theory_dir: results_milestone/04_summary/unused_theory
+  analysis_summary_dir: results_milestone/04_summary/unused_analysis
+  analysis_figures_dir: results_milestone/04_summary/unused_figures
+  milestone_summary_dir: results_milestone/04_summary
+  milestone_figures_dir: results_milestone/figures
+  milestone_doc: results_milestone/milestone.md
+
+postgres:
+  host: localhost
+  port: 55432
+  database: drkg_bench
+  user: drkg_user
+  password_env: PGPASSWORD
+  password_value: drkg_local_password
+  restart_command: bash scripts/dev_restart_postgres_docker.sh --config config_milestone.yaml
+  disable_parallel_query: true
+  max_parallel_workers_per_gather: 0
+  shared_buffers: 1GB
+  work_mem: 64MB
+  maintenance_work_mem: 512MB
+  effective_cache_size: 2GB
+  nondefault_planner_settings: {}
+
+neo4j:
+  uri: bolt://localhost:17687
+  user: neo4j
+  password_env: NEO4J_PASSWORD
+  password_value: drkg_local_password
+  restart_command: bash scripts/dev_restart_neo4j_docker.sh --config config_milestone.yaml
+  runtime: slotted
+  prepend_cypher_runtime_slotted: true
+  require_profile_runtime_slotted: true
+  load_batch_size: 5000
+  heap_size: 1g
+  page_cache_size: 1g
+
+relation_mapping:
+  prefix: REL
+  sanitize_non_alnum_to_underscore: true
+  uppercase: true
+  append_sha1_hex_chars: 8
+
+preprocess:
+  drop_empty_local_identifier: true
+  deduplicate_exact_triples: true
+  keep_self_loops_in_storage: true
+  write_nodes_csv: true
+  write_edges_csv: true
+  write_relation_type_map: true
+  raw_row_limit: 50000
+
+templates:
+  anchor_variable_policy: first_node_variable
+  min_grounded_matches: 20
+  min_valid_anchors: 5
+  path4_branch_and_bound_max_exact_evals: 0
+  cycle4_branch_and_bound_max_exact_evals: 0
+  select_num_triangles: 1
+  select_four_cycle_if_available: false
+  ranking:
+    - grounded_match_count_desc
+    - valid_anchor_count_desc
+    - relation_type_pattern_tuple_lexicographic
+    - endpoint_type_pattern_tuple_lexicographic
+
+sampling:
+  hub_top_fraction: 0.10
+  baseline_bindings_per_template_regime: 2
+  join_order_bindings_per_template_regime: 0
+  without_replacement: true
+
+benchmark:
+  warmup_runs: 0
+  measured_runs: 1
+  instrumented_runs: 1
+  plain_timeout_sec: 10
+  instrumented_timeout_sec: 20
+  restart_dbms_per_instance: false
+  require_programmatic_restart: false
+  try_flush_os_page_cache: false
+  require_os_page_cache_attempt_log: false
+  preserve_timing_if_only_instrumented_fails: true
+  log_csv: true
+  log_failure_details: true
+
+system:
+  page_cache_flush_command: null
+
+services:
+  mode: docker
+  auto_start: true
+  readiness_poll_interval_sec: 0.1
+  docker:
+    enable_postgres: true
+    enable_neo4j: false
+    postgres_container: drkg-bench-postgres-milestone
+    postgres_image: postgres:16
+    postgres_port: 55432
+    postgres_data_tmpfs: false
+    postgres_data_tmpfs_size: 4g
+    neo4j_container: drkg-bench-neo4j-milestone
+    neo4j_image: neo4j:5.26.0-community
+    neo4j_http_port: 17474
+    neo4j_bolt_port: 17687
+    neo4j_data_tmpfs: false
+    neo4j_data_tmpfs_size: 4g
+    neo4j_logs_tmpfs: false
+    neo4j_logs_tmpfs_size: 512m
+
+join_order:
+  sql_shape: fully_parenthesized_left_deep
+  join_collapse_limit: 1
+  from_collapse_limit: 1
+  include_2_edge_path: false
+  use_cross_join_for_disconnected_prefix: true
+  classify_connected_vs_cross_product: true
+
+milestone:
+  select_path2: 1
+  select_path3: 0
+  select_triangle: 0
+
+plotting:
+  font_size: 16
+  dpi: 600
+  formats:
+    - png
