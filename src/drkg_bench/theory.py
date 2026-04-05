@@ -9,11 +9,14 @@ import pulp
 from .artifacts import load_selected_templates, read_csv_rows
 from .common import AppContext, print_status
 from .postgres import connect_postgres
+from .reporting import family_label, fmt_num, template_label_map
 from .templates import Template
 
 
 def run_theory(ctx: AppContext) -> None:
-    templates = {template.template_id: template for template in load_selected_templates(ctx)}
+    selected_templates = load_selected_templates(ctx)
+    label_map = template_label_map(selected_templates)
+    templates = {label_map[template.template_id]: template for template in selected_templates}
     bindings = read_csv_rows(ctx.path(ctx.config["paths"]["bindings_dir"]) / "baseline_bindings.csv")
     conn = connect_postgres(ctx)
     try:
@@ -22,32 +25,33 @@ def run_theory(ctx: AppContext) -> None:
         print_status(f"Theory: computing hypergraphs and AGM bounds for {len(bindings)} baseline instances")
         progress_every = max(1, min(25, max(1, len(bindings) // 10)))
         for index, binding in enumerate(bindings, start=1):
-            template = templates[binding["template_id"]]
+            template = templates[binding["tid"]]
             hypergraph = describe_hypergraph(template)
-            hypergraphs[template.template_id] = hypergraph
+            hypergraphs[binding["tid"]] = hypergraph
             relation_sizes = relation_sizes_for_binding(conn, template, binding["anchor_id"])
             agm_bound, lp_status, fractional_cover = compute_agm_bound(template, relation_sizes)
             rows.append(
                 {
-                    "template_id": template.template_id,
-                    "family": template.family,
-                    "regime": binding["regime"],
-                    "anchor_id": binding["anchor_id"],
-                    "acyclic": hypergraph["acyclic"],
-                    "relation_sizes": "|".join(str(value) for value in relation_sizes),
-                    "agm_bound": agm_bound,
-                    "lp_status": lp_status,
-                    "fractional_cover": "|".join(str(value) for value in fractional_cover),
+                    "tid": binding["tid"],
+                    "fam": family_label(template.family),
+                    "reg": binding["reg"],
+                    "bid": binding["bid"],
+                    "acyclic": str(hypergraph["acyclic"]).lower(),
+                    "agm": fmt_num(agm_bound),
+                    "lp": lp_status,
                 }
             )
             if index == 1 or index == len(bindings) or index % progress_every == 0:
                 print_status(f"Theory: processed {index}/{len(bindings)} bindings")
         if rows:
             print_status("Theory: writing agm_bounds.csv")
-            ctx.write_csv(Path(ctx.config["paths"]["theory_dir"]) / "agm_bounds.csv", list(rows[0].keys()), rows)
+            ctx.write_csv(Path(ctx.config["paths"]["theory_dir"]) / "agm_bounds.csv", ["tid", "fam", "reg", "bid", "acyclic", "agm", "lp"], rows)
         print_status("Theory: writing hypergraph summaries")
         ctx.write_json(Path(ctx.config["paths"]["theory_dir"]) / "template_hypergraphs.json", hypergraphs)
-        ctx.write_json(Path(ctx.config["paths"]["theory_dir"]) / "theory_summary.json", {"templates": list(hypergraphs.keys()), "instance_count": len(rows)})
+        ctx.write_json(
+            Path(ctx.config["paths"]["theory_dir"]) / "theory_summary.json",
+            {"templates": list(hypergraphs.keys()), "instance_count": len(rows)},
+        )
     finally:
         conn.close()
 

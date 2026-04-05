@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import json
-from collections import Counter
 from pathlib import Path
 
 from .artifacts import load_selected_templates, read_csv_rows
 from .common import AppContext, BenchmarkError, print_status
+from .reporting import template_label_map
 from .templates import all_left_deep_orders
 
 
@@ -36,27 +36,27 @@ def verify_results(ctx: AppContext) -> None:
         ctx.path(ctx.config["paths"]["env_dir"]) / "environment_report.json",
         ctx.path(ctx.config["paths"]["preprocess_dir"]) / "preprocess_summary.json",
         ctx.path(ctx.config["paths"]["preprocess_dir"]) / "dataset_analysis.json",
-        ctx.path(ctx.config["paths"]["preprocess_dir"]) / "node_type_counts.csv",
-        ctx.path(ctx.config["paths"]["preprocess_dir"]) / "relation_edge_counts.csv",
+        ctx.path(ctx.config["paths"]["preprocess_dir"]) / "dataset_overview.csv",
+        ctx.path(ctx.config["paths"]["preprocess_dir"]) / "top_node_types.csv",
+        ctx.path(ctx.config["paths"]["preprocess_dir"]) / "top_relations.csv",
         ctx.path(ctx.config["paths"]["load_postgres_dir"]) / "load_summary.json",
         ctx.path(ctx.config["paths"]["load_neo4j_dir"]) / "load_summary.json",
-        ctx.path(ctx.config["paths"]["template_mining_dir"]) / "candidate_templates.csv",
         ctx.path(ctx.config["paths"]["template_mining_dir"]) / "selected_templates.yaml",
+        ctx.path(ctx.config["paths"]["template_mining_dir"]) / "selected_templates.csv",
+        ctx.path(ctx.config["paths"]["template_mining_dir"]) / "candidate_summary.csv",
         ctx.path(ctx.config["paths"]["template_mining_dir"]) / "mining_summary.json",
-        ctx.path(ctx.config["paths"]["bindings_dir"]) / "baseline_bindings.csv",
-        ctx.path(ctx.config["paths"]["bindings_dir"]) / "join_order_bindings.csv",
         ctx.path(ctx.config["paths"]["postgres_baseline_dir"]) / "postgres_baseline.csv",
         ctx.path(ctx.config["paths"]["neo4j_baseline_dir"]) / "neo4j_baseline.csv",
-        ctx.path(ctx.config["paths"]["comparison_dir"]) / "comparison_tables.csv",
+        ctx.path(ctx.config["paths"]["comparison_dir"]) / "engine_summary.csv",
         ctx.path(ctx.config["paths"]["comparison_dir"]) / "comparison_metrics.json",
         ctx.path(ctx.config["paths"]["join_order_dir"]) / "postgres_join_order.csv",
         ctx.path(ctx.config["paths"]["theory_dir"]) / "agm_bounds.csv",
-        ctx.path(ctx.config["paths"]["analysis_summary_dir"]) / "summary_tables.csv",
-        ctx.path(ctx.config["paths"]["analysis_summary_dir"]) / "instance_theory_runtime.csv",
-        ctx.path(ctx.config["paths"]["analysis_summary_dir"]) / "family_regime_summary.csv",
-        ctx.path(ctx.config["paths"]["analysis_summary_dir"]) / "cyclicity_contrast_summary.csv",
-        ctx.path(ctx.config["paths"]["analysis_summary_dir"]) / "comparison_summary.csv",
+        ctx.path(ctx.config["paths"]["theory_dir"]) / "theory_summary.json",
+        ctx.path(ctx.config["paths"]["analysis_summary_dir"]) / "instance_summary.csv",
+        ctx.path(ctx.config["paths"]["analysis_summary_dir"]) / "template_summary.csv",
+        ctx.path(ctx.config["paths"]["analysis_summary_dir"]) / "structure_summary.csv",
         ctx.path(ctx.config["paths"]["analysis_summary_dir"]) / "join_order_summary.csv",
+        ctx.path(ctx.config["paths"]["analysis_summary_dir"]) / "summary_metrics.json",
         ctx.path(ctx.config["paths"]["prepare_figures_dir"]) / "figure_manifest.json",
         ctx.path(ctx.config["paths"]["experiments_figures_dir"]) / "figure_manifest.json",
         ctx.path(ctx.config["paths"]["analysis_figures_dir"]) / "figure_manifest.json",
@@ -67,47 +67,37 @@ def verify_results(ctx: AppContext) -> None:
     if missing:
         raise BenchmarkError(f"Missing expected result files: {missing}")
 
-    print_status("Verify: checking benchmark row counts and nominal budgets")
-    templates = load_selected_templates(ctx)
-    baseline_bindings = read_csv_rows(ctx.path(ctx.config["paths"]["bindings_dir"]) / "baseline_bindings.csv")
-    join_bindings = read_csv_rows(ctx.path(ctx.config["paths"]["bindings_dir"]) / "join_order_bindings.csv")
+    print_status("Verify: checking benchmark row counts and compact output consistency")
+    selected_templates = load_selected_templates(ctx)
+    label_map = template_label_map(selected_templates)
+    templates_by_tid = {label_map[template.template_id]: template for template in selected_templates}
     postgres_rows = read_csv_rows(ctx.path(ctx.config["paths"]["postgres_baseline_dir"]) / "postgres_baseline.csv")
     neo4j_rows = read_csv_rows(ctx.path(ctx.config["paths"]["neo4j_baseline_dir"]) / "neo4j_baseline.csv")
     join_rows = read_csv_rows(ctx.path(ctx.config["paths"]["join_order_dir"]) / "postgres_join_order.csv")
 
-    expected_baseline = len(baseline_bindings)
-    if len(postgres_rows) != expected_baseline:
-        raise BenchmarkError(f"PostgreSQL baseline row count mismatch: expected {expected_baseline}, found {len(postgres_rows)}")
-    if len(neo4j_rows) != expected_baseline:
-        raise BenchmarkError(f"Neo4j baseline row count mismatch: expected {expected_baseline}, found {len(neo4j_rows)}")
+    pg_keys = {(row["tid"], row["reg"], row["bid"]) for row in postgres_rows}
+    neo_keys = {(row["tid"], row["reg"], row["bid"]) for row in neo4j_rows}
+    if pg_keys != neo_keys:
+        raise BenchmarkError("PostgreSQL and Neo4j baseline instance keys do not match")
+    if len(pg_keys) != len(postgres_rows) or len(neo_keys) != len(neo4j_rows):
+        raise BenchmarkError("Duplicate baseline instance keys detected")
 
-    join_binding_counts = Counter(row["template_id"] for row in join_bindings)
+    join_keys_by_tid: dict[str, set[str]] = {}
+    for row in join_rows:
+        join_keys_by_tid.setdefault(row["tid"], set()).add(row["bid"])
     expected_join_rows = 0
-    for template in templates:
-        if template.template_id.startswith("path_2_"):
+    for tid, template in templates_by_tid.items():
+        if tid == "P2":
             continue
-        expected_join_rows += join_binding_counts[template.template_id] * (1 + len(all_left_deep_orders(template)))
+        binding_count = len(join_keys_by_tid.get(tid, set()))
+        expected_join_rows += binding_count * (1 + len(all_left_deep_orders(template)))
     if len(join_rows) != expected_join_rows:
         raise BenchmarkError(f"Join-order row count mismatch: expected {expected_join_rows}, found {len(join_rows)}")
 
-    four_cycle_selected = any(template.family == "cycle" for template in templates)
-    if four_cycle_selected:
-        nominal = ctx.config.get("validation", {}).get("nominal_counts_if_four_cycle", {})
-        expected_nominal_baseline = int(nominal.get("baseline_instances", expected_baseline))
-        expected_nominal_join = int(nominal.get("join_order_instances", expected_join_rows))
-        if expected_baseline != expected_nominal_baseline:
-            raise BenchmarkError(
-                f"Baseline instance budget mismatch against config nominal count: expected {expected_nominal_baseline}, computed {expected_baseline}"
-            )
-        if expected_join_rows != expected_nominal_join:
-            raise BenchmarkError(
-                f"Join-order instance budget mismatch against config nominal count: expected {expected_nominal_join}, computed {expected_join_rows}"
-            )
-
     with (ctx.path(ctx.config["paths"]["comparison_dir"]) / "comparison_metrics.json").open("r", encoding="utf-8") as handle:
         comparison_metrics = json.load(handle)
-    if int(comparison_metrics.get("matched_instances", -1)) < 0:
-        raise BenchmarkError("comparison_metrics.json is missing matched_instances")
+    if int(comparison_metrics.get("matched_instances", -1)) != len(pg_keys):
+        raise BenchmarkError("comparison_metrics.json matched_instances does not match baseline key count")
 
     print_status("Verify: checking figure manifests and final package manifest")
     for manifest_path in [

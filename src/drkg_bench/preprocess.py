@@ -9,6 +9,7 @@ import numpy as np
 
 from .common import AppContext, BenchmarkError, print_status
 from .plotting import NATURE_PALETTE, apply_plot_style, remove_existing_figures, style_axes, write_figure_manifest
+from .reporting import fmt_int, fmt_num
 from .relation_mapping import sanitize_relation_type
 
 
@@ -206,13 +207,27 @@ def run_preprocess(ctx: AppContext) -> None:
         "total_degree_summary": _degree_summary(total_degrees),
     }
 
-    ctx.write_csv(Path(paths["preprocess_dir"]) / "node_type_counts.csv", ["node_type", "node_count"], node_type_counts)
-    ctx.write_csv(Path(paths["preprocess_dir"]) / "relation_edge_counts.csv", ["rel_type", "edge_count"], relation_edge_counts)
+    top_node_types = node_type_counts[:10]
+    top_relations = relation_edge_counts[:10]
+    overview_rows = [
+        {"metric": "raw_rows", "value": fmt_int(stats["raw_rows"])},
+        {"metric": "kept_rows", "value": fmt_int(stats["kept_rows"])},
+        {"metric": "unique_nodes", "value": fmt_int(node_count)},
+        {"metric": "unique_edges", "value": fmt_int(edge_count)},
+        {"metric": "unique_relations", "value": fmt_int(len(relation_types))},
+        {"metric": "dup_rows", "value": fmt_int(stats["duplicate_rows_dropped"])},
+        {"metric": "empty_endpoints", "value": fmt_int(stats["rows_with_empty_endpoint_dropped"])},
+        {"metric": "self_loops", "value": fmt_int(stats["self_loops_kept"])},
+        {"metric": "deg_med", "value": fmt_num(dataset_analysis["total_degree_summary"]["median"])},
+        {"metric": "deg_p95", "value": fmt_num(dataset_analysis["total_degree_summary"]["p95"])},
+    ]
+    ctx.write_csv(Path(paths["preprocess_dir"]) / "dataset_overview.csv", ["metric", "value"], overview_rows)
+    ctx.write_csv(Path(paths["preprocess_dir"]) / "top_node_types.csv", ["node_type", "node_count"], top_node_types)
+    ctx.write_csv(Path(paths["preprocess_dir"]) / "top_relations.csv", ["rel_type", "edge_count"], top_relations)
     ctx.write_json(Path(paths["preprocess_dir"]) / "dataset_analysis.json", dataset_analysis)
     _write_dataset_figures(
         ctx,
-        node_type_counts=node_type_counts,
-        relation_edge_counts=relation_edge_counts,
+        node_type_counts=top_node_types,
         total_degrees=total_degrees,
     )
 
@@ -226,8 +241,9 @@ def run_preprocess(ctx: AppContext) -> None:
         "nodes_csv": str(nodes_csv.relative_to(ctx.root)),
         "edges_csv": str(edges_csv.relative_to(ctx.root)),
         "relation_type_map_csv": str(relation_map_csv.relative_to(ctx.root)),
-        "node_type_counts_csv": str((ctx.path(paths["preprocess_dir"]) / "node_type_counts.csv").relative_to(ctx.root)),
-        "relation_edge_counts_csv": str((ctx.path(paths["preprocess_dir"]) / "relation_edge_counts.csv").relative_to(ctx.root)),
+        "dataset_overview_csv": str((ctx.path(paths["preprocess_dir"]) / "dataset_overview.csv").relative_to(ctx.root)),
+        "top_node_types_csv": str((ctx.path(paths["preprocess_dir"]) / "top_node_types.csv").relative_to(ctx.root)),
+        "top_relations_csv": str((ctx.path(paths["preprocess_dir"]) / "top_relations.csv").relative_to(ctx.root)),
         "dataset_analysis_json": str((ctx.path(paths["preprocess_dir"]) / "dataset_analysis.json").relative_to(ctx.root)),
     }
     ctx.write_json(Path(paths["preprocess_dir"]) / "preprocess_summary.json", summary)
@@ -250,7 +266,6 @@ def _write_dataset_figures(
     ctx: AppContext,
     *,
     node_type_counts: list[dict[str, object]],
-    relation_edge_counts: list[dict[str, object]],
     total_degrees: np.ndarray,
 ) -> None:
     apply_plot_style(ctx)
@@ -259,55 +274,48 @@ def _write_dataset_figures(
     remove_existing_figures(
         figure_dir,
         [
+        "dataset_profile.png",
         "dataset_node_type_counts.png",
         "dataset_relation_edge_counts_top20.png",
         "dataset_total_degree_histogram.png",
         ],
     )
 
-    if node_type_counts:
-        fig, ax = plt.subplots(figsize=(10, 6))
-        labels = [row["node_type"] for row in node_type_counts]
-        values = [int(row["node_count"]) for row in node_type_counts]
-        ax.bar(range(len(labels)), values, color=NATURE_PALETTE["dataset"])
-        ax.set_ylabel("Nodes")
-        ax.set_xticks(range(len(labels)))
-        ax.set_xticklabels(labels, rotation=45, ha="right")
-        style_axes(ax)
-        fig.tight_layout()
-        fig.savefig(figure_dir / "dataset_node_type_counts.png", dpi=ctx.config["plotting"]["dpi"])
-        plt.close(fig)
-
-    top_relations = relation_edge_counts[:20]
-    if top_relations:
-        fig, ax = plt.subplots(figsize=(14, 8))
-        labels = [row["rel_type"] for row in top_relations]
-        values = [int(row["edge_count"]) for row in top_relations]
-        ax.bar(range(len(labels)), values, color=NATURE_PALETTE["neutral"])
-        ax.set_ylabel("Edges")
-        ax.set_xticks(range(len(labels)))
-        ax.set_xticklabels(labels, rotation=90)
-        style_axes(ax)
-        fig.tight_layout()
-        fig.savefig(figure_dir / "dataset_relation_edge_counts_top20.png", dpi=ctx.config["plotting"]["dpi"])
-        plt.close(fig)
-
     positive_degrees = total_degrees[total_degrees > 0]
-    if positive_degrees.size > 0:
-        fig, ax = plt.subplots(figsize=(10, 6))
+    if node_type_counts and positive_degrees.size > 0:
+        fig, axes = plt.subplots(1, 2, figsize=(13, 5.6))
+
+        node_ax = axes[0]
+        labels = [str(row["node_type"]) for row in node_type_counts]
+        values = [int(row["node_count"]) for row in node_type_counts]
+        node_ax.bar(range(len(labels)), values, color=NATURE_PALETTE["dataset"], width=0.72)
+        node_ax.set_ylabel("Nodes")
+        node_ax.set_xticks(range(len(labels)))
+        node_ax.set_xticklabels(labels, rotation=35, ha="right")
+        style_axes(node_ax)
+
+        degree_ax = axes[1]
         max_degree = float(np.max(positive_degrees))
         if max_degree > 1:
-            bins = np.logspace(0, np.log10(max_degree), num=30)
-            ax.set_xscale("log")
+            bins = np.logspace(0, np.log10(max_degree), num=26)
+            degree_ax.set_xscale("log")
         else:
             bins = 20
-        ax.hist(positive_degrees, bins=bins, color=NATURE_PALETTE["template"], alpha=0.9)
-        ax.set_yscale("log")
-        ax.set_xlabel("Total degree")
-        ax.set_ylabel("Nodes")
-        style_axes(ax)
+        degree_ax.hist(
+            positive_degrees,
+            bins=bins,
+            color=NATURE_PALETTE["template"],
+            alpha=0.9,
+            edgecolor="white",
+            linewidth=0.6,
+        )
+        degree_ax.set_yscale("log")
+        degree_ax.set_xlabel("Total degree")
+        degree_ax.set_ylabel("Nodes")
+        style_axes(degree_ax)
+
         fig.tight_layout()
-        fig.savefig(figure_dir / "dataset_total_degree_histogram.png", dpi=ctx.config["plotting"]["dpi"])
+        fig.savefig(figure_dir / "dataset_profile.png", dpi=ctx.config["plotting"]["dpi"])
         plt.close(fig)
 
     write_figure_manifest(ctx, figure_dir)

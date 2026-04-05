@@ -14,6 +14,7 @@ import numpy as np
 from .common import AppContext, BenchmarkError, print_status
 from .plotting import NATURE_PALETTE, apply_plot_style, remove_existing_figures, style_axes, write_figure_manifest
 from .postgres import connect_postgres
+from .reporting import family_label, fmt_int, fmt_num, template_label_map
 from .templates import (
     Template,
     build_template,
@@ -196,11 +197,12 @@ def run_template_mining(ctx: AppContext) -> None:
             tuple(row["relation_type_pattern"].split("|")),
         )
     )
-    _write_candidate_csv(ctx, flat_candidate_rows)
+    _write_candidate_summary_csv(ctx, family_summaries)
     ctx.write_yaml(
         Path(ctx.config["paths"]["template_mining_dir"]) / "selected_templates.yaml",
         {"templates": [template.to_dict() for template in selected_templates]},
     )
+    _write_selected_template_csv(ctx, selected_templates)
     ctx.write_json(
         Path(ctx.config["paths"]["template_mining_dir"]) / "mining_summary.json",
         {
@@ -831,27 +833,46 @@ def _candidate_row(
     }
 
 
-def _write_candidate_csv(ctx: AppContext, rows: list[dict[str, object]]) -> None:
-    destination = Path(ctx.config["paths"]["template_mining_dir"]) / "candidate_templates.csv"
-    fieldnames = [
-        "template_id",
-        "family",
-        "edge_count",
-        "relation_type_pattern",
-        "endpoint_type_pattern",
-        "node_type_pattern",
-        "grounded_match_count",
-        "valid_anchor_count",
-        "anchor_degree_min",
-        "anchor_degree_median",
-        "anchor_degree_p95",
-        "anchor_degree_max",
-        "evaluation_stage",
+def _write_candidate_summary_csv(ctx: AppContext, family_summaries: list[dict[str, object]]) -> None:
+    rows = []
+    for summary in family_summaries:
+        if "candidate_count" not in summary:
+            continue
+        rows.append(
+            {
+                "fam": family_label(str(summary["family"])),
+                "edges": fmt_int(summary["edge_count"]),
+                "cand_n": fmt_int(summary["candidate_count"]),
+                "sel_n": fmt_int(summary.get("selected_count", "")),
+                "sec": fmt_num(summary.get("elapsed_sec", "")),
+            }
+        )
+    ctx.write_csv(
+        Path(ctx.config["paths"]["template_mining_dir"]) / "candidate_summary.csv",
+        ["fam", "edges", "cand_n", "sel_n", "sec"],
+        rows,
+    )
+
+
+def _write_selected_template_csv(ctx: AppContext, templates: list[Template]) -> None:
+    label_map = template_label_map(templates)
+    rows = [
+        {
+            "tid": label_map[template.template_id],
+            "fam": family_label(template.family),
+            "edges": fmt_int(template.edge_count),
+            "grounded": fmt_int(template.grounded_match_count),
+            "anchors": fmt_int(template.valid_anchor_count),
+            "deg_med": fmt_num(template.anchor_degree_median),
+            "deg_p95": fmt_num(template.anchor_degree_p95),
+        }
+        for template in templates
     ]
-    if rows:
-        ctx.write_csv(destination, fieldnames, rows)
-    else:
-        ctx.write_csv(destination, fieldnames, [])
+    ctx.write_csv(
+        Path(ctx.config["paths"]["template_mining_dir"]) / "selected_templates.csv",
+        ["tid", "fam", "edges", "grounded", "anchors", "deg_med", "deg_p95"],
+        rows,
+    )
 
 
 def _write_prepare_figures(
@@ -866,56 +887,49 @@ def _write_prepare_figures(
     remove_existing_figures(
         figure_dir,
         [
+        "template_profile.png",
         "relation_edge_counts_top20.png",
         "selected_template_grounded_matches.png",
         "candidate_count_by_family.png",
         ],
     )
 
-    relation_items = sorted(graph.rel_info.values(), key=lambda item: (-item.edge_count, item.rel_type))[:20]
-    if relation_items:
-        fig, ax = plt.subplots(figsize=(14, 8))
-        labels = [item.rel_type for item in relation_items]
-        values = [item.edge_count for item in relation_items]
-        ax.bar(range(len(labels)), values, color=NATURE_PALETTE["dataset"])
-        ax.set_ylabel("Edges")
-        ax.set_xticks(range(len(labels)))
-        ax.set_xticklabels(labels, rotation=90)
-        style_axes(ax)
-        fig.tight_layout()
-        fig.savefig(figure_dir / "relation_edge_counts_top20.png", dpi=ctx.config["plotting"]["dpi"])
-        plt.close(fig)
-
-    if selected_templates:
-        fig, ax = plt.subplots(figsize=(12, 7))
-        labels = [template.template_id for template in selected_templates]
-        values = [template.grounded_match_count for template in selected_templates]
-        ax.bar(range(len(labels)), values, color=NATURE_PALETTE["template"])
-        ax.set_ylabel("Grounded matches")
-        ax.set_xticks(range(len(labels)))
-        ax.set_xticklabels(labels, rotation=45, ha="right")
-        style_axes(ax)
-        fig.tight_layout()
-        fig.savefig(figure_dir / "selected_template_grounded_matches.png", dpi=ctx.config["plotting"]["dpi"])
-        plt.close(fig)
-
     candidate_entries = []
     for summary in family_summaries:
         if "candidate_count" not in summary:
             continue
-        candidate_entries.append((f"{summary['family']}_{summary['edge_count']}", int(summary["candidate_count"])))
-    if candidate_entries:
+        candidate_entries.append((f"{family_label(str(summary['family']))}-{summary['edge_count']}", int(summary["candidate_count"])))
+    if candidate_entries and selected_templates:
+        label_map = template_label_map(selected_templates)
+        fig, axes = plt.subplots(1, 2, figsize=(12.8, 5.6))
+
+        left_ax = axes[0]
         ordered = sorted(candidate_entries)
-        fig, ax = plt.subplots(figsize=(10, 6))
-        labels = [item[0] for item in ordered]
-        values = [item[1] for item in ordered]
-        ax.bar(range(len(labels)), values, color=NATURE_PALETTE["candidate"])
-        ax.set_ylabel("Candidates")
-        ax.set_xticks(range(len(labels)))
-        ax.set_xticklabels(labels, rotation=45, ha="right")
-        style_axes(ax)
+        left_labels = [item[0] for item in ordered]
+        left_values = [item[1] for item in ordered]
+        left_ax.bar(range(len(left_labels)), left_values, color=NATURE_PALETTE["candidate"], width=0.7)
+        left_ax.set_ylabel("Candidates")
+        left_ax.set_xticks(range(len(left_labels)))
+        left_ax.set_xticklabels(left_labels)
+        style_axes(left_ax)
+
+        right_ax = axes[1]
+        tids = [label_map[template.template_id] for template in selected_templates]
+        grounded = [template.grounded_match_count for template in selected_templates]
+        anchors = [template.valid_anchor_count for template in selected_templates]
+        x_values = np.arange(len(tids))
+        width = 0.36
+        right_ax.bar(x_values - width / 2, grounded, width=width, color=NATURE_PALETTE["template"], label="grounded")
+        right_ax.bar(x_values + width / 2, anchors, width=width, color=NATURE_PALETTE["dataset"], label="anchors")
+        right_ax.set_yscale("log")
+        right_ax.set_ylabel("Count")
+        right_ax.set_xticks(x_values)
+        right_ax.set_xticklabels(tids)
+        style_axes(right_ax)
+        right_ax.legend()
+
         fig.tight_layout()
-        fig.savefig(figure_dir / "candidate_count_by_family.png", dpi=ctx.config["plotting"]["dpi"])
+        fig.savefig(figure_dir / "template_profile.png", dpi=ctx.config["plotting"]["dpi"])
         plt.close(fig)
 
     write_figure_manifest(ctx, figure_dir)

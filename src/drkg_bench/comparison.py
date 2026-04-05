@@ -10,90 +10,113 @@ import numpy as np
 from .artifacts import read_csv_rows
 from .common import AppContext, print_status
 from .plotting import NATURE_PALETTE, apply_plot_style, remove_existing_figures, style_axes, write_figure_manifest
+from .reporting import fmt_int, fmt_num
 
 
 def run_engine_comparison(ctx: AppContext) -> None:
     print_status("Comparison: reading PostgreSQL and Neo4j baseline tables")
     pg_rows = read_csv_rows(ctx.path(ctx.config["paths"]["postgres_baseline_dir"]) / "postgres_baseline.csv")
-    neo4j_rows = read_csv_rows(ctx.path(ctx.config["paths"]["neo4j_baseline_dir"]) / "neo4j_baseline.csv")
-    neo4j_index = {
-        (row["template_id"], row["regime"], row["anchor_id"]): row
-        for row in neo4j_rows
+    neo_rows = read_csv_rows(ctx.path(ctx.config["paths"]["neo4j_baseline_dir"]) / "neo4j_baseline.csv")
+    neo_index = {
+        (row["tid"], row["reg"], row["bid"]): row
+        for row in neo_rows
     }
-    comparison_rows = []
+
+    matched_rows = []
     for pg in pg_rows:
-        key = (pg["template_id"], pg["regime"], pg["anchor_id"])
-        if key not in neo4j_index:
+        key = (pg["tid"], pg["reg"], pg["bid"])
+        neo = neo_index.get(key)
+        if neo is None:
             continue
-        neo = neo4j_index[key]
-        pg_median = _safe_float(pg["median_ms"])
-        neo_median = _safe_float(neo["median_ms"])
-        output_match = bool(pg["output_cardinality"]) and pg["output_cardinality"] == neo["output_cardinality"]
-        comparison_rows.append(
+        pg_ms = _safe_float(pg.get("med_ms", ""))
+        neo_ms = _safe_float(neo.get("med_ms", ""))
+        matched_rows.append(
             {
-                "template_id": pg["template_id"],
-                "family": pg["family"],
-                "regime": pg["regime"],
-                "anchor_id": pg["anchor_id"],
-                "postgres_status": pg["status"],
-                "neo4j_status": neo["status"],
-                "postgres_median_ms": pg["median_ms"],
-                "neo4j_median_ms": neo["median_ms"],
-                "postgres_iqr_ms": pg["iqr_ms"],
-                "neo4j_iqr_ms": neo["iqr_ms"],
-                "postgres_output_cardinality": pg["output_cardinality"],
-                "neo4j_output_cardinality": neo["output_cardinality"],
-                "output_cardinality_match": output_match,
-                "neo4j_over_postgres_speedup": (pg_median / neo_median) if pg_median and neo_median and neo_median > 0 else "",
+                "tid": pg["tid"],
+                "reg": pg["reg"],
+                "bid": pg["bid"],
+                "pg_ms": pg_ms,
+                "neo_ms": neo_ms,
+                "pg_out": pg.get("out", ""),
+                "neo_out": neo.get("out", ""),
+                "out_match": bool(pg.get("out")) and pg.get("out") == neo.get("out"),
+                "spd": (pg_ms / neo_ms) if pg_ms and neo_ms and neo_ms > 0 else None,
             }
         )
 
+    summary_rows = _summarize_matches(matched_rows)
     comparison_dir = Path(ctx.config["paths"]["comparison_dir"])
-    fieldnames = [
-        "template_id",
-        "family",
-        "regime",
-        "anchor_id",
-        "postgres_status",
-        "neo4j_status",
-        "postgres_median_ms",
-        "neo4j_median_ms",
-        "postgres_iqr_ms",
-        "neo4j_iqr_ms",
-        "postgres_output_cardinality",
-        "neo4j_output_cardinality",
-        "output_cardinality_match",
-        "neo4j_over_postgres_speedup",
-    ]
-    ctx.write_csv(comparison_dir / "comparison_tables.csv", fieldnames, comparison_rows)
-    avg_speedup = [
-        float(row["neo4j_over_postgres_speedup"])
-        for row in comparison_rows
-        if row["neo4j_over_postgres_speedup"] != ""
-    ]
+    ctx.write_csv(
+        comparison_dir / "engine_summary.csv",
+        [
+            "tid",
+            "reg",
+            "n",
+            "match_n",
+            "pg_q1",
+            "pg_ms",
+            "pg_q3",
+            "neo_q1",
+            "neo_ms",
+            "neo_q3",
+            "spd_q1",
+            "spd",
+            "spd_q3",
+        ],
+        summary_rows,
+    )
+
+    speedups = [row["spd"] for row in matched_rows if row["spd"] is not None]
     ctx.write_json(
         comparison_dir / "comparison_metrics.json",
         {
-            "matched_instances": len(comparison_rows),
-            "matching_output_cardinality_instances": sum(1 for row in comparison_rows if row["output_cardinality_match"]),
-            "mean_neo4j_over_postgres_speedup": statistics.mean(avg_speedup) if avg_speedup else None,
+            "matched_instances": len(matched_rows),
+            "matching_output_cardinality_instances": sum(1 for row in matched_rows if row["out_match"]),
+            "mean_neo_over_pg_speedup": statistics.mean(speedups) if speedups else None,
         },
     )
-    print_status(f"Comparison: matched {len(comparison_rows)} baseline instances; writing figures")
-    _write_experiment_figures(ctx, pg_rows, neo4j_rows, comparison_rows)
+    print_status(f"Comparison: matched {len(matched_rows)} baseline instances; writing figures")
+    _write_experiment_figures(ctx, summary_rows)
 
 
-def _write_experiment_figures(
-    ctx: AppContext,
-    pg_rows: list[dict[str, str]],
-    neo4j_rows: list[dict[str, str]],
-    comparison_rows: list[dict[str, object]],
-) -> None:
+def _summarize_matches(rows: list[dict[str, object]]) -> list[dict[str, str]]:
+    grouped: dict[tuple[str, str], list[dict[str, object]]] = defaultdict(list)
+    for row in rows:
+        grouped[(str(row["tid"]), str(row["reg"]))].append(row)
+
+    summary_rows = []
+    for (tid, reg), group_rows in sorted(grouped.items()):
+        pg_values = [float(row["pg_ms"]) for row in group_rows if row["pg_ms"] is not None]
+        neo_values = [float(row["neo_ms"]) for row in group_rows if row["neo_ms"] is not None]
+        spd_values = [float(row["spd"]) for row in group_rows if row["spd"] is not None]
+        summary_rows.append(
+            {
+                "tid": tid,
+                "reg": reg,
+                "n": fmt_int(len(group_rows)),
+                "match_n": fmt_int(sum(1 for row in group_rows if row["out_match"])),
+                "pg_q1": fmt_num(_percentile(pg_values, 25)),
+                "pg_ms": fmt_num(_percentile(pg_values, 50)),
+                "pg_q3": fmt_num(_percentile(pg_values, 75)),
+                "neo_q1": fmt_num(_percentile(neo_values, 25)),
+                "neo_ms": fmt_num(_percentile(neo_values, 50)),
+                "neo_q3": fmt_num(_percentile(neo_values, 75)),
+                "spd_q1": fmt_num(_percentile(spd_values, 25)),
+                "spd": fmt_num(_percentile(spd_values, 50)),
+                "spd_q3": fmt_num(_percentile(spd_values, 75)),
+            }
+        )
+    return summary_rows
+
+
+def _write_experiment_figures(ctx: AppContext, summary_rows: list[dict[str, str]]) -> None:
     apply_plot_style(ctx)
     figure_dir = ctx.path(ctx.config["paths"]["experiments_figures_dir"])
     remove_existing_figures(
         figure_dir,
         [
+            "engine_runtime.png",
+            "speedup.png",
             "engine_runtime_grouped.png",
             "engine_work_grouped.png",
             "engine_speedup_by_template.png",
@@ -103,215 +126,80 @@ def _write_experiment_figures(
             "engine_runtime_ratio.png",
         ],
     )
-
-    runtime_summary = _aggregate_metric(
-        pg_rows + neo4j_rows,
-        group_keys=["engine", "template_id", "regime"],
-        metric_key="median_ms",
-    )
-    work_summary = _aggregate_metric(
-        pg_rows + neo4j_rows,
-        group_keys=["engine", "template_id", "regime"],
-        metric_key="intermediate_work_rows",
-    )
-    speedup_summary = _aggregate_metric(
-        comparison_rows,
-        group_keys=["template_id", "regime"],
-        metric_key="neo4j_over_postgres_speedup",
-    )
-
-    _grouped_engine_metric_figure(
-        figure_dir / "engine_runtime_grouped.png",
-        runtime_summary,
-        metric_label="Median runtime (ms)",
-        metric_field="median",
-        y_log=True,
-        dpi=int(ctx.config["plotting"]["dpi"]),
-    )
-    _grouped_engine_metric_figure(
-        figure_dir / "engine_work_grouped.png",
-        work_summary,
-        metric_label="Intermediate work",
-        metric_field="median",
-        y_log=True,
-        dpi=int(ctx.config["plotting"]["dpi"]),
-    )
-    _speedup_figure(
-        figure_dir / "engine_speedup_by_template.png",
-        speedup_summary,
-        dpi=int(ctx.config["plotting"]["dpi"]),
-    )
-    _regime_runtime_figure(
-        figure_dir / "regime_runtime_by_engine.png",
-        runtime_summary,
-        dpi=int(ctx.config["plotting"]["dpi"]),
-    )
-
+    _engine_runtime_figure(figure_dir / "engine_runtime.png", summary_rows, dpi=int(ctx.config["plotting"]["dpi"]))
+    _speedup_figure(figure_dir / "speedup.png", summary_rows, dpi=int(ctx.config["plotting"]["dpi"]))
     write_figure_manifest(ctx, figure_dir)
 
 
-def _aggregate_metric(
-    rows: list[dict[str, object]],
-    *,
-    group_keys: list[str],
-    metric_key: str,
-) -> list[dict[str, object]]:
-    grouped: dict[tuple[object, ...], list[float]] = defaultdict(list)
-    for row in rows:
-        raw_value = row.get(metric_key, "")
-        value = _safe_float(raw_value)
-        if value is None:
-            continue
-        key = tuple(row[key_name] for key_name in group_keys)
-        grouped[key].append(value)
-
-    summaries = []
-    for key, values in grouped.items():
-        q1, median, q3 = _quartiles(values)
-        entry = {group_keys[idx]: key[idx] for idx in range(len(group_keys))}
-        entry.update(
-            {
-                "count": len(values),
-                "q1": q1,
-                "median": median,
-                "q3": q3,
-            }
-        )
-        summaries.append(entry)
-    return sorted(summaries, key=lambda row: tuple(str(row[key]) for key in group_keys))
-
-
-def _grouped_engine_metric_figure(
-    path: Path,
-    rows: list[dict[str, object]],
-    *,
-    metric_label: str,
-    metric_field: str,
-    y_log: bool,
-    dpi: int,
-) -> None:
+def _engine_runtime_figure(path: Path, rows: list[dict[str, str]], *, dpi: int) -> None:
     if not rows:
         return
+    regimes = [reg for reg in ["uniform", "hub"] if any(row["reg"] == reg for row in rows)]
+    tids = sorted({row["tid"] for row in rows})
+    fig, axes = plt.subplots(1, len(regimes), figsize=(max(12, len(tids) * 1.5), 5.6), squeeze=False)
 
-    labels = sorted({(str(row["template_id"]), str(row["regime"])) for row in rows})
-    label_positions = {label: idx for idx, label in enumerate(labels)}
-    fig, ax = plt.subplots(figsize=(max(12, len(labels) * 1.5), 7))
-    width = 0.38
-    for engine, offset in [("postgres", -width / 2), ("neo4j", width / 2)]:
-        engine_rows = [row for row in rows if row["engine"] == engine]
-        if not engine_rows:
-            continue
-        x_values = []
-        heights = []
-        errors_low = []
-        errors_high = []
-        for row in engine_rows:
-            label = (str(row["template_id"]), str(row["regime"]))
-            x_values.append(label_positions[label] + offset)
-            heights.append(float(row[metric_field]))
-            errors_low.append(max(0.0, float(row["median"]) - float(row["q1"])))
-            errors_high.append(max(0.0, float(row["q3"]) - float(row["median"])))
-        ax.bar(
-            x_values,
-            heights,
-            width=width,
-            color=NATURE_PALETTE[engine],
-            label=engine,
+    for axis, reg in zip(axes[0], regimes, strict=True):
+        reg_rows = {row["tid"]: row for row in rows if row["reg"] == reg}
+        x_values = np.arange(len(tids))
+        width = 0.34
+        pg_values = [float(reg_rows[tid]["pg_ms"]) if tid in reg_rows and reg_rows[tid]["pg_ms"] else np.nan for tid in tids]
+        neo_values = [float(reg_rows[tid]["neo_ms"]) if tid in reg_rows and reg_rows[tid]["neo_ms"] else np.nan for tid in tids]
+        axis.bar(x_values - width / 2, pg_values, width=width, color=NATURE_PALETTE["postgres"], label="pg")
+        axis.bar(x_values + width / 2, neo_values, width=width, color=NATURE_PALETTE["neo4j"], label="neo")
+        axis.set_yscale("log")
+        axis.set_ylabel("Median ms")
+        axis.set_xticks(x_values)
+        axis.set_xticklabels(tids)
+        axis.text(0.02, 0.96, reg, transform=axis.transAxes, va="top", ha="left", fontsize=14)
+        style_axes(axis)
+        axis.legend()
+
+    fig.tight_layout()
+    fig.savefig(path, dpi=dpi)
+    plt.close(fig)
+
+
+def _speedup_figure(path: Path, rows: list[dict[str, str]], *, dpi: int) -> None:
+    if not rows:
+        return
+    regimes = [reg for reg in ["uniform", "hub"] if any(row["reg"] == reg for row in rows)]
+    tids = sorted({row["tid"] for row in rows})
+    fig, axes = plt.subplots(1, len(regimes), figsize=(max(12, len(tids) * 1.5), 5.2), squeeze=False)
+
+    for axis, reg in zip(axes[0], regimes, strict=True):
+        reg_rows = {row["tid"]: row for row in rows if row["reg"] == reg}
+        values = [float(reg_rows[tid]["spd"]) if tid in reg_rows and reg_rows[tid]["spd"] else np.nan for tid in tids]
+        q1_values = [float(reg_rows[tid]["spd_q1"]) if tid in reg_rows and reg_rows[tid]["spd_q1"] else np.nan for tid in tids]
+        q3_values = [float(reg_rows[tid]["spd_q3"]) if tid in reg_rows and reg_rows[tid]["spd_q3"] else np.nan for tid in tids]
+        errors_low = [max(0.0, val - q1) if not np.isnan(val) and not np.isnan(q1) else np.nan for val, q1 in zip(values, q1_values, strict=True)]
+        errors_high = [max(0.0, q3 - val) if not np.isnan(val) and not np.isnan(q3) else np.nan for val, q3 in zip(values, q3_values, strict=True)]
+        axis.bar(
+            np.arange(len(tids)),
+            values,
             yerr=np.asarray([errors_low, errors_high]),
             capsize=3,
-            linewidth=0,
+            color=NATURE_PALETTE["neutral"],
+            width=0.64,
         )
-    if y_log:
-        ax.set_yscale("log")
-    ax.set_ylabel(metric_label)
-    ax.set_xticks(range(len(labels)))
-    ax.set_xticklabels([f"{template}\n{regime}" for template, regime in labels], rotation=45, ha="right")
-    style_axes(ax)
-    ax.legend(frameon=False)
-    fig.tight_layout()
-    fig.savefig(path, dpi=dpi)
-    plt.close(fig)
-
-
-def _speedup_figure(path: Path, rows: list[dict[str, object]], *, dpi: int) -> None:
-    if not rows:
-        return
-
-    labels = [f"{row['template_id']}\n{row['regime']}" for row in rows]
-    values = [float(row["median"]) for row in rows]
-    errors_low = [max(0.0, float(row["median"]) - float(row["q1"])) for row in rows]
-    errors_high = [max(0.0, float(row["q3"]) - float(row["median"])) for row in rows]
-    fig, ax = plt.subplots(figsize=(max(12, len(labels) * 1.3), 6))
-    ax.bar(
-        range(len(labels)),
-        values,
-        color=NATURE_PALETTE["neutral"],
-        yerr=np.asarray([errors_low, errors_high]),
-        capsize=3,
-        linewidth=0,
-    )
-    ax.axhline(1.0, color="#666666", linewidth=1.0, linestyle="--")
-    ax.set_ylabel("Neo4j over PostgreSQL speedup")
-    ax.set_xticks(range(len(labels)))
-    ax.set_xticklabels(labels, rotation=45, ha="right")
-    style_axes(ax)
-    fig.tight_layout()
-    fig.savefig(path, dpi=dpi)
-    plt.close(fig)
-
-
-def _regime_runtime_figure(path: Path, rows: list[dict[str, object]], *, dpi: int) -> None:
-    if not rows:
-        return
-    engines = [engine for engine in ["postgres", "neo4j"] if any(row["engine"] == engine for row in rows)]
-    if not engines:
-        return
-
-    fig, axes = plt.subplots(1, len(engines), figsize=(max(12, len(rows) * 0.8), 6), squeeze=False)
-    for axis, engine in zip(axes[0], engines, strict=True):
-        engine_rows = [row for row in rows if row["engine"] == engine]
-        templates = sorted({str(row["template_id"]) for row in engine_rows})
-        template_positions = {template: idx for idx, template in enumerate(templates)}
-        width = 0.38
-        for regime, offset in [("uniform_random", -width / 2), ("hub_anchored", width / 2)]:
-            regime_rows = [row for row in engine_rows if row["regime"] == regime]
-            x_values = []
-            heights = []
-            errors_low = []
-            errors_high = []
-            for row in regime_rows:
-                x_values.append(template_positions[str(row["template_id"])] + offset)
-                heights.append(float(row["median"]))
-                errors_low.append(max(0.0, float(row["median"]) - float(row["q1"])))
-                errors_high.append(max(0.0, float(row["q3"]) - float(row["median"])))
-            axis.bar(
-                x_values,
-                heights,
-                width=width,
-                color=NATURE_PALETTE[regime],
-                label=regime,
-                yerr=np.asarray([errors_low, errors_high]),
-                capsize=3,
-                linewidth=0,
-            )
-        axis.set_yscale("log")
-        axis.set_ylabel("Median runtime (ms)")
-        axis.set_xticks(range(len(templates)))
-        axis.set_xticklabels(templates, rotation=45, ha="right")
+        axis.axhline(1.0, color=NATURE_PALETTE["frame"], linewidth=1.0, linestyle="--")
+        axis.set_ylabel("pg / neo")
+        axis.set_xticks(np.arange(len(tids)))
+        axis.set_xticklabels(tids)
+        axis.text(0.02, 0.96, reg, transform=axis.transAxes, va="top", ha="left", fontsize=14)
         style_axes(axis)
-        axis.legend(frameon=False)
+
     fig.tight_layout()
     fig.savefig(path, dpi=dpi)
     plt.close(fig)
 
 
-def _quartiles(values: list[float]) -> tuple[float, float, float]:
-    data = np.asarray(values, dtype=float)
-    return (
-        float(np.percentile(data, 25)),
-        float(np.median(data)),
-        float(np.percentile(data, 75)),
-    )
+def _percentile(values: list[float], percentile: int) -> float | None:
+    if not values:
+        return None
+    array = np.asarray(values, dtype=float)
+    if percentile == 50:
+        return float(np.median(array))
+    return float(np.percentile(array, percentile))
 
 
 def _safe_float(raw_value: object) -> float | None:

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import statistics
 import time
 from pathlib import Path
@@ -15,6 +14,7 @@ from .common import AppContext, print_status
 from .neo4j_db import connect_neo4j
 from .plotting import NATURE_PALETTE, apply_plot_style, style_axes, write_figure_manifest
 from .postgres import connect_postgres, explain_json, plan_metrics
+from .reporting import engine_label, fmt_int, fmt_num, join_class_label, template_label_map
 from .system_ops import restart_engine_for_instance
 from .templates import (
     Template,
@@ -39,7 +39,11 @@ def run_postgres_baseline(ctx: AppContext) -> None:
     if rows:
         output_dir = Path(ctx.config["paths"]["postgres_baseline_dir"])
         print_status("PostgreSQL baseline: writing benchmark outputs")
-        ctx.write_csv(output_dir / "postgres_baseline.csv", list(rows[0].keys()), rows)
+        ctx.write_csv(
+            output_dir / "postgres_baseline.csv",
+            ["eng", "tid", "fam", "reg", "grp", "bid", "status", "fail_stage", "fail_type", "med_ms", "iqr_ms", "out", "buf_hit", "work", "flush_ok"],
+            rows,
+        )
         _write_logs(ctx, output_dir / "logs", rows)
 
 
@@ -54,18 +58,11 @@ def run_join_order(ctx: AppContext) -> None:
     if rows:
         output_dir = Path(ctx.config["paths"]["join_order_dir"])
         print_status("PostgreSQL join-order study: writing benchmark outputs")
-        ctx.write_csv(output_dir / "postgres_join_order.csv", list(rows[0].keys()), rows)
-        join_classes = [
-            {
-                "template_id": row["template_id"],
-                "join_order": row["join_order"],
-                "join_order_class": row["join_order_class"],
-            }
-            for row in rows
-            if row["join_order"]
-        ]
-        if join_classes:
-            ctx.write_csv(output_dir / "join_order_classes.csv", list(join_classes[0].keys()), join_classes)
+        ctx.write_csv(
+            output_dir / "postgres_join_order.csv",
+            ["eng", "tid", "fam", "reg", "grp", "bid", "ord_idx", "join_cls", "status", "fail_stage", "fail_type", "med_ms", "iqr_ms", "out", "buf_hit", "work", "flush_ok"],
+            rows,
+        )
         _write_logs(ctx, output_dir / "logs", rows)
         _write_join_order_figure(ctx, rows)
 
@@ -76,30 +73,32 @@ def _run_postgres_instances(
     binding_rows: list[dict[str, str]],
     mode: str,
 ) -> list[dict[str, Any]]:
-    templates = {template.template_id: template for template in load_selected_templates(ctx)}
+    selected_templates = load_selected_templates(ctx)
+    label_map = template_label_map(selected_templates)
+    templates = {label_map[template.template_id]: template for template in selected_templates}
     rows: list[dict[str, Any]] = []
     total_bindings = len(binding_rows)
     progress_every = _progress_interval(total_bindings)
     last_group: tuple[str, str] | None = None
 
     for binding_index, binding in enumerate(binding_rows, start=1):
-        template = templates[binding["template_id"]]
-        group = (template.template_id, binding["regime"])
+        template = templates[binding["tid"]]
+        group = (binding["tid"], binding["reg"])
         if group != last_group:
-            print_status(f"PostgreSQL {mode}: {template.template_id} / {binding['regime']}")
+            print_status(f"PostgreSQL {mode}: {binding['tid']} / {binding['reg']}")
             last_group = group
         if binding_index == 1 or binding_index == total_bindings or binding_index % progress_every == 0:
             print_status(f"PostgreSQL {mode}: binding {binding_index}/{total_bindings}")
         if mode == "baseline":
-            rows.append(_benchmark_postgres_instance(ctx, template, binding, None))
+            rows.append(_benchmark_postgres_instance(ctx, template, binding, None, 0))
             continue
 
-        if template.template_id.startswith("path_2_"):
+        if binding["tid"] == "P2":
             continue
 
-        rows.append(_benchmark_postgres_instance(ctx, template, binding, None))
-        for order in all_left_deep_orders(template):
-            rows.append(_benchmark_postgres_instance(ctx, template, binding, order))
+        rows.append(_benchmark_postgres_instance(ctx, template, binding, None, 0))
+        for order_index, order in enumerate(all_left_deep_orders(template), start=1):
+            rows.append(_benchmark_postgres_instance(ctx, template, binding, order, order_index))
     return rows
 
 
@@ -108,6 +107,7 @@ def _benchmark_postgres_instance(
     template: Template,
     binding: dict[str, str],
     order: tuple[str, ...] | None,
+    order_index: int,
 ) -> dict[str, Any]:
     instance_info = restart_engine_for_instance(ctx, "postgres")
     conn = connect_postgres(ctx)
@@ -124,12 +124,10 @@ def _benchmark_postgres_instance(
         if order:
             sql, join_order_class = forced_order_sql(template, order)
             params = forced_order_params(template, order, binding["anchor_id"])
-            join_order = ",".join(order)
         else:
             sql = default_count_sql(template)
             params = default_count_params(template, binding["anchor_id"])
             join_order_class = "default_plan"
-            join_order = ""
 
         return _run_postgres_query_instance(
             ctx,
@@ -138,7 +136,7 @@ def _benchmark_postgres_instance(
             params=params,
             template=template,
             binding=binding,
-            join_order=join_order,
+            order_index=order_index,
             join_order_class=join_order_class,
             instance_info=instance_info,
         )
@@ -154,7 +152,7 @@ def _run_postgres_query_instance(
     params: list[Any],
     template: Template,
     binding: dict[str, str],
-    join_order: str,
+    order_index: int,
     join_order_class: str,
     instance_info: dict[str, Any],
 ) -> dict[str, Any]:
@@ -169,7 +167,7 @@ def _run_postgres_query_instance(
     with conn.cursor() as cur:
         cur.execute(f"SET statement_timeout = {plain_timeout}")
 
-    result_row = _base_result_row("postgres", template, binding, join_order, join_order_class, instance_info)
+    result_row = _base_result_row("postgres", template, binding, order_index, join_order_class, instance_info)
     timings = []
     output_cardinality = None
 
@@ -179,15 +177,14 @@ def _run_postgres_query_instance(
     except Exception as exc:
         result_row.update(
             {
-                "status": "failed",
-                "failure_stage": "warmup",
-                "failure_type": type(exc).__name__,
-                "timeout_value_sec": ctx.config["benchmark"]["plain_timeout_sec"],
-                "median_ms": "",
+                "status": "fail",
+                "fail_stage": "warmup",
+                "fail_type": type(exc).__name__,
+                "med_ms": "",
                 "iqr_ms": "",
-                "output_cardinality": "",
-                "shared_hit_blocks": "",
-                "intermediate_work_rows": "",
+                "out": "",
+                "buf_hit": "",
+                "work": "",
             }
         )
         return result_row
@@ -197,44 +194,41 @@ def _run_postgres_query_instance(
             started = time.perf_counter()
             output_cardinality = _execute_count_sql(conn, sql, params)
             timings.append((time.perf_counter() - started) * 1000.0)
-            result_row["completed_measured_runs"] = index + 1
     except Exception as exc:
         result_row.update(
             {
-                "status": "failed",
-                "failure_stage": "measured",
-                "failure_type": type(exc).__name__,
-                "timeout_value_sec": ctx.config["benchmark"]["plain_timeout_sec"],
-                "median_ms": "",
+                "status": "fail",
+                "fail_stage": "measured",
+                "fail_type": type(exc).__name__,
+                "med_ms": "",
                 "iqr_ms": "",
-                "output_cardinality": "",
-                "shared_hit_blocks": "",
-                "intermediate_work_rows": "",
+                "out": "",
+                "buf_hit": "",
+                "work": "",
             }
         )
         return result_row
 
-    result_row["median_ms"] = round(statistics.median(timings), 6)
-    result_row["iqr_ms"] = round(float(np.percentile(timings, 75) - np.percentile(timings, 25)), 6)
-    result_row["output_cardinality"] = output_cardinality
+    result_row["med_ms"] = fmt_num(statistics.median(timings))
+    result_row["iqr_ms"] = fmt_num(float(np.percentile(timings, 75) - np.percentile(timings, 25)))
+    result_row["out"] = fmt_int(output_cardinality)
 
     try:
         with conn.cursor() as cur:
             cur.execute(f"SET statement_timeout = {instrumented_timeout}")
         plan = explain_json(conn, sql, params)
         metrics = plan_metrics(plan)
-        result_row["shared_hit_blocks"] = metrics["shared_hit_blocks"]
-        result_row["intermediate_work_rows"] = metrics["intermediate_work_rows"]
+        result_row["buf_hit"] = fmt_num(metrics["shared_hit_blocks"])
+        result_row["work"] = fmt_num(metrics["intermediate_work_rows"])
         result_row["status"] = "ok"
     except Exception as exc:
         result_row.update(
             {
-                "status": "instrumented_failed",
-                "failure_stage": "instrumented",
-                "failure_type": type(exc).__name__,
-                "timeout_value_sec": ctx.config["benchmark"]["instrumented_timeout_sec"],
-                "shared_hit_blocks": "",
-                "intermediate_work_rows": "",
+                "status": "inst_fail",
+                "fail_stage": "inst",
+                "fail_type": type(exc).__name__,
+                "buf_hit": "",
+                "work": "",
             }
         )
     return result_row
@@ -247,7 +241,9 @@ def _execute_count_sql(conn, sql: str, params: list[Any]) -> int:
 
 
 def run_neo4j_baseline(ctx: AppContext) -> None:
-    templates = {template.template_id: template for template in load_selected_templates(ctx)}
+    selected_templates = load_selected_templates(ctx)
+    label_map = template_label_map(selected_templates)
+    templates = {label_map[template.template_id]: template for template in selected_templates}
     bindings = read_csv_rows(ctx.path(ctx.config["paths"]["bindings_dir"]) / "baseline_bindings.csv")
     print_status(f"Neo4j baseline: benchmarking {len(bindings)} query instances")
     rows = []
@@ -255,10 +251,10 @@ def run_neo4j_baseline(ctx: AppContext) -> None:
     progress_every = _progress_interval(total_bindings)
     last_group: tuple[str, str] | None = None
     for binding_index, binding in enumerate(bindings, start=1):
-        template = templates[binding["template_id"]]
-        group = (template.template_id, binding["regime"])
+        template = templates[binding["tid"]]
+        group = (binding["tid"], binding["reg"])
         if group != last_group:
-            print_status(f"Neo4j baseline: {template.template_id} / {binding['regime']}")
+            print_status(f"Neo4j baseline: {binding['tid']} / {binding['reg']}")
             last_group = group
         if binding_index == 1 or binding_index == total_bindings or binding_index % progress_every == 0:
             print_status(f"Neo4j baseline: binding {binding_index}/{total_bindings}")
@@ -266,7 +262,11 @@ def run_neo4j_baseline(ctx: AppContext) -> None:
     if rows:
         output_dir = Path(ctx.config["paths"]["neo4j_baseline_dir"])
         print_status("Neo4j baseline: writing benchmark outputs")
-        ctx.write_csv(output_dir / "neo4j_baseline.csv", list(rows[0].keys()), rows)
+        ctx.write_csv(
+            output_dir / "neo4j_baseline.csv",
+            ["eng", "tid", "fam", "reg", "grp", "bid", "status", "fail_stage", "fail_type", "med_ms", "iqr_ms", "out", "db_hits", "work", "run_ok", "flush_ok"],
+            rows,
+        )
         _write_logs(ctx, output_dir / "logs", rows)
 
 
@@ -279,7 +279,7 @@ def _benchmark_neo4j_instance(ctx: AppContext, template: Template, binding: dict
     plain_timeout = int(ctx.config["benchmark"]["plain_timeout_sec"])
     if instrumented_runs != 1:
         raise ValueError("This harness expects benchmark.instrumented_runs = 1")
-    result_row = _base_result_row("neo4j", template, binding, "", "default_plan", instance_info)
+    result_row = _base_result_row("neo4j", template, binding, 0, "default_plan", instance_info)
     timings = []
     output_cardinality = None
 
@@ -294,16 +294,15 @@ def _benchmark_neo4j_instance(ctx: AppContext, template: Template, binding: dict
             except Exception as exc:
                 result_row.update(
                     {
-                        "status": "failed",
-                        "failure_stage": "warmup",
-                        "failure_type": type(exc).__name__,
-                        "timeout_value_sec": ctx.config["benchmark"]["plain_timeout_sec"],
-                        "median_ms": "",
+                        "status": "fail",
+                        "fail_stage": "warmup",
+                        "fail_type": type(exc).__name__,
+                        "med_ms": "",
                         "iqr_ms": "",
-                        "output_cardinality": "",
+                        "out": "",
                         "db_hits": "",
-                        "intermediate_work_rows": "",
-                        "runtime_verified": False,
+                        "work": "",
+                        "run_ok": "false",
                     }
                 )
                 return result_row
@@ -313,70 +312,65 @@ def _benchmark_neo4j_instance(ctx: AppContext, template: Template, binding: dict
                     started = time.perf_counter()
                     output_cardinality = _run_neo4j_count(session, plain_query, params, plain_timeout)
                     timings.append((time.perf_counter() - started) * 1000.0)
-                    result_row["completed_measured_runs"] = index + 1
             except Exception as exc:
                 result_row.update(
                     {
-                        "status": "failed",
-                        "failure_stage": "measured",
-                        "failure_type": type(exc).__name__,
-                        "timeout_value_sec": ctx.config["benchmark"]["plain_timeout_sec"],
-                        "median_ms": "",
+                        "status": "fail",
+                        "fail_stage": "measured",
+                        "fail_type": type(exc).__name__,
+                        "med_ms": "",
                         "iqr_ms": "",
-                        "output_cardinality": "",
+                        "out": "",
                         "db_hits": "",
-                        "intermediate_work_rows": "",
-                        "runtime_verified": False,
+                        "work": "",
+                        "run_ok": "false",
                     }
                 )
                 return result_row
 
-            result_row["median_ms"] = round(statistics.median(timings), 6)
-            result_row["iqr_ms"] = round(float(np.percentile(timings, 75) - np.percentile(timings, 25)), 6)
-            result_row["output_cardinality"] = output_cardinality
+            result_row["med_ms"] = fmt_num(statistics.median(timings))
+            result_row["iqr_ms"] = fmt_num(float(np.percentile(timings, 75) - np.percentile(timings, 25)))
+            result_row["out"] = fmt_int(output_cardinality)
 
             try:
                 records, summary = _run_neo4j_profile(session, profile_query, params, int(ctx.config["benchmark"]["instrumented_timeout_sec"]))
-                result_row["output_cardinality"] = int(records[0]["output_cardinality"])
+                result_row["out"] = fmt_int(records[0]["output_cardinality"])
                 runtime_ok = _verify_neo4j_runtime(summary)
-                result_row["runtime_verified"] = runtime_ok
+                result_row["run_ok"] = str(runtime_ok).lower()
                 if runtime_ok:
                     profile_metrics = _neo4j_profile_metrics(summary.profile)
-                    result_row["db_hits"] = profile_metrics["db_hits"]
-                    result_row["intermediate_work_rows"] = profile_metrics["rows"]
+                    result_row["db_hits"] = fmt_num(profile_metrics["db_hits"])
+                    result_row["work"] = fmt_num(profile_metrics["rows"])
                     result_row["status"] = "ok"
                 else:
-                    result_row["status"] = "instrumented_failed"
-                    result_row["failure_stage"] = "instrumented"
-                    result_row["failure_type"] = "RuntimeVerificationFailed"
-                    result_row["timeout_value_sec"] = ctx.config["benchmark"]["instrumented_timeout_sec"]
+                    result_row["status"] = "inst_fail"
+                    result_row["fail_stage"] = "inst"
+                    result_row["fail_type"] = "RuntimeCheck"
                     result_row["db_hits"] = ""
-                    result_row["intermediate_work_rows"] = ""
+                    result_row["work"] = ""
             except Exception as exc:
                 result_row.update(
                     {
-                        "status": "instrumented_failed",
-                        "failure_stage": "instrumented",
-                        "failure_type": type(exc).__name__,
-                        "timeout_value_sec": ctx.config["benchmark"]["instrumented_timeout_sec"],
+                        "status": "inst_fail",
+                        "fail_stage": "inst",
+                        "fail_type": type(exc).__name__,
                         "db_hits": "",
-                        "intermediate_work_rows": "",
-                        "runtime_verified": False,
+                        "work": "",
+                        "run_ok": "false",
                     }
                 )
     except Exception as exc:
         result_row.update(
             {
-                "status": "failed",
-                "failure_stage": "session",
-                "failure_type": type(exc).__name__,
-                "timeout_value_sec": ctx.config["benchmark"]["plain_timeout_sec"],
-                "median_ms": "",
+                "status": "fail",
+                "fail_stage": "session",
+                "fail_type": type(exc).__name__,
+                "med_ms": "",
                 "iqr_ms": "",
-                "output_cardinality": "",
+                "out": "",
                 "db_hits": "",
-                "intermediate_work_rows": "",
-                "runtime_verified": False,
+                "work": "",
+                "run_ok": "false",
             }
         )
     finally:
@@ -434,46 +428,37 @@ def _base_result_row(
     engine: str,
     template: Template,
     binding: dict[str, str],
-    join_order: str,
+    order_index: int,
     join_order_class: str,
     instance_info: dict[str, Any],
 ) -> dict[str, Any]:
     cache_flush = instance_info["cache_flush"]
     return {
-        "engine": engine,
-        "template_id": template.template_id,
-        "family": template.family,
-        "regime": binding["regime"],
-        "binding_group": binding["binding_group"],
-        "binding_index": binding["binding_index"],
-        "anchor_id": binding["anchor_id"],
-        "join_order": join_order,
-        "join_order_class": join_order_class,
+        "eng": engine_label(engine),
+        "tid": binding["tid"],
+        "fam": binding["fam"],
+        "reg": binding["reg"],
+        "grp": binding["grp"],
+        "bid": binding["bid"],
+        "ord_idx": fmt_int(order_index),
+        "join_cls": join_class_label(join_order_class),
         "status": "ok",
-        "failure_stage": "",
-        "failure_type": "",
-        "timeout_value_sec": "",
-        "completed_measured_runs": 0,
-        "median_ms": "",
+        "fail_stage": "",
+        "fail_type": "",
+        "med_ms": "",
         "iqr_ms": "",
-        "output_cardinality": "",
-        "shared_hit_blocks": "",
+        "out": "",
+        "buf_hit": "",
         "db_hits": "",
-        "intermediate_work_rows": "",
-        "runtime_verified": "",
-        "cache_flush_attempted": cache_flush["attempted"],
-        "cache_flush_success": cache_flush["success"],
-        "cache_flush_detail": cache_flush["detail"],
+        "work": "",
+        "run_ok": "",
+        "flush_ok": str(bool(cache_flush["success"])).lower(),
     }
 
 
 def _write_logs(ctx: AppContext, log_dir: Path, rows: list[dict[str, Any]]) -> None:
     destination = ctx.path(log_dir)
     destination.mkdir(parents=True, exist_ok=True)
-    with (destination / "instances.jsonl").open("w", encoding="utf-8") as handle:
-        for row in rows:
-            handle.write(json.dumps(row, sort_keys=True))
-            handle.write("\n")
     failures = [row for row in rows if row["status"] != "ok"]
     ctx.write_json(
         destination / "summary.json",
@@ -481,7 +466,7 @@ def _write_logs(ctx: AppContext, log_dir: Path, rows: list[dict[str, Any]]) -> N
             "instance_count": len(rows),
             "ok_count": sum(1 for row in rows if row["status"] == "ok"),
             "failure_count": len(failures),
-            "failures": failures[:100],
+            "failures": failures[:20],
         },
     )
 
@@ -495,45 +480,51 @@ def _write_join_order_figure(ctx: AppContext, rows: list[dict[str, Any]]) -> Non
     figure_dir.mkdir(parents=True, exist_ok=True)
     apply_plot_style(ctx)
 
-    for filename in ["postgres_join_order_per_template.png", "postgres_join_order_runtime.png"]:
+    for filename in ["join_order_effect.png", "postgres_join_order_per_template.png", "postgres_join_order_runtime.png"]:
         path = figure_dir / filename
         if path.exists():
             path.unlink()
-    output_path = figure_dir / "postgres_join_order_per_template.png"
+    output_path = figure_dir / "join_order_effect.png"
 
-    template_ids = sorted({str(row["template_id"]) for row in rows if row.get("median_ms", "") not in {"", None}})
+    template_ids = sorted({str(row["tid"]) for row in rows if row.get("med_ms", "") not in {"", None}})
     if not template_ids:
         write_figure_manifest(ctx, figure_dir)
         return
 
     fig, ax = plt.subplots(figsize=(max(12, len(template_ids) * 1.6), 7))
     offsets = {
-        "default_plan": -0.18,
-        "connected_prefix": 0.0,
-        "cross_product_inducing": 0.18,
+        "default": -0.18,
+        "connected": 0.0,
+        "cross": 0.18,
     }
     markers = {
-        "default_plan": "D",
-        "connected_prefix": "o",
-        "cross_product_inducing": "^",
+        "default": "D",
+        "connected": "o",
+        "cross": "^",
     }
-    for join_class in ["default_plan", "connected_prefix", "cross_product_inducing"]:
-        class_rows = [row for row in rows if row.get("join_order_class") == join_class and row.get("median_ms", "") not in {"", None}]
+    for join_class in ["default", "connected", "cross"]:
+        class_rows = [row for row in rows if row.get("join_cls") == join_class and row.get("med_ms", "") not in {"", None}]
         if not class_rows:
             continue
         x_values = []
         y_values = []
         for row in class_rows:
-            template_index = template_ids.index(str(row["template_id"]))
+            template_index = template_ids.index(str(row["tid"]))
             x_values.append(template_index + offsets[join_class])
-            y_values.append(float(row["median_ms"]))
+            y_values.append(float(row["med_ms"]))
         ax.scatter(
             x_values,
             y_values,
             s=42,
             alpha=0.8,
             marker=markers[join_class],
-            color=NATURE_PALETTE[join_class],
+            color=NATURE_PALETTE[
+                {
+                    "default": "default_plan",
+                    "connected": "connected_prefix",
+                    "cross": "cross_product_inducing",
+                }[join_class]
+            ],
             label=join_class,
         )
     ax.set_yscale("log")
