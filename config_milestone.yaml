@@ -86,6 +86,7 @@ templates:
   path4_branch_and_bound_max_exact_evals: 0
   cycle4_branch_and_bound_max_exact_evals: 0
   length4_exact_eval_timeout_sec: 10
+  length4_timeout_streak_limit: 4
   select_num_triangles: 1
   select_four_cycle_if_available: false
   ranking:

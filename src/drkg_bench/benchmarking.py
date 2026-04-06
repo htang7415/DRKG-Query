@@ -27,6 +27,50 @@ from .templates import (
     forced_order_sql,
 )
 
+BASELINE_RESULT_FIELDS = [
+    "eng",
+    "tid",
+    "fam",
+    "reg",
+    "grp",
+    "bid",
+    "ord_idx",
+    "join_cls",
+    "status",
+    "fail_stage",
+    "fail_type",
+    "med_ms",
+    "iqr_ms",
+    "out",
+    "buf_hit",
+    "db_hits",
+    "work",
+    "run_ok",
+    "flush_ok",
+]
+
+JOIN_ORDER_RESULT_FIELDS = [
+    "eng",
+    "tid",
+    "fam",
+    "reg",
+    "grp",
+    "bid",
+    "ord_idx",
+    "join_cls",
+    "status",
+    "fail_stage",
+    "fail_type",
+    "med_ms",
+    "iqr_ms",
+    "out",
+    "buf_hit",
+    "db_hits",
+    "work",
+    "run_ok",
+    "flush_ok",
+]
+
 
 def run_postgres_baseline(ctx: AppContext) -> None:
     binding_rows = read_csv_rows(ctx.path(ctx.config["paths"]["bindings_dir"]) / "baseline_bindings.csv")
@@ -41,7 +85,7 @@ def run_postgres_baseline(ctx: AppContext) -> None:
         print_status("PostgreSQL baseline: writing benchmark outputs")
         ctx.write_csv(
             output_dir / "postgres_baseline.csv",
-            ["eng", "tid", "fam", "reg", "grp", "bid", "status", "fail_stage", "fail_type", "med_ms", "iqr_ms", "out", "buf_hit", "work", "flush_ok"],
+            BASELINE_RESULT_FIELDS,
             rows,
         )
         _write_logs(ctx, output_dir / "logs", rows)
@@ -60,7 +104,7 @@ def run_join_order(ctx: AppContext) -> None:
         print_status("PostgreSQL join-order study: writing benchmark outputs")
         ctx.write_csv(
             output_dir / "postgres_join_order.csv",
-            ["eng", "tid", "fam", "reg", "grp", "bid", "ord_idx", "join_cls", "status", "fail_stage", "fail_type", "med_ms", "iqr_ms", "out", "buf_hit", "work", "flush_ok"],
+            JOIN_ORDER_RESULT_FIELDS,
             rows,
         )
         _write_logs(ctx, output_dir / "logs", rows)
@@ -264,7 +308,7 @@ def run_neo4j_baseline(ctx: AppContext) -> None:
         print_status("Neo4j baseline: writing benchmark outputs")
         ctx.write_csv(
             output_dir / "neo4j_baseline.csv",
-            ["eng", "tid", "fam", "reg", "grp", "bid", "status", "fail_stage", "fail_type", "med_ms", "iqr_ms", "out", "db_hits", "work", "run_ok", "flush_ok"],
+            BASELINE_RESULT_FIELDS,
             rows,
         )
         _write_logs(ctx, output_dir / "logs", rows)

@@ -82,8 +82,9 @@ templates:
   path4_branch_and_bound_max_exact_evals: 256
   cycle4_branch_and_bound_max_exact_evals: 256
   length4_exact_eval_timeout_sec: 60
+  length4_timeout_streak_limit: 8
   select_num_triangles: 2
-  select_four_cycle_if_available: true
+  select_four_cycle_if_available: false
   ranking:
     - grounded_match_count_desc
     - valid_anchor_count_desc

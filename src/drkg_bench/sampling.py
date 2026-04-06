@@ -7,11 +7,13 @@ from .artifacts import load_selected_templates
 from .common import AppContext, print_status
 from .postgres import connect_postgres
 from .reporting import family_label, regime_label, template_label_map
+from .template_mining import _load_graph_index, local_anchor_rows
 from .templates import Template, valid_anchors_params, valid_anchors_sql
 
 
 def run_sampling(ctx: AppContext) -> None:
     templates = load_selected_templates(ctx)
+    graph = _load_graph_index(ctx)
     conn = connect_postgres(ctx)
     try:
         baseline_rows = []
@@ -21,7 +23,7 @@ def run_sampling(ctx: AppContext) -> None:
         print_status(f"Sampling bindings for {len(templates)} selected templates")
         for index, template in enumerate(templates, start=1):
             print_status(f"Sampling template {index}/{len(templates)}: {template.template_id}")
-            anchors = fetch_valid_anchors(conn, template)
+            anchors = fetch_valid_anchors(ctx, conn, graph, template)
             baseline_rows.extend(sample_bindings(ctx, template, anchors, "baseline", seed, label_map[template.template_id]))
             join_rows.extend(sample_bindings(ctx, template, anchors, "join_order", seed, label_map[template.template_id]))
         print_status("Sampling complete; writing binding CSVs")
@@ -32,11 +34,21 @@ def run_sampling(ctx: AppContext) -> None:
         conn.close()
 
 
-def fetch_valid_anchors(conn, template: Template) -> list[dict]:
-    with conn.cursor() as cur:
-        cur.execute(valid_anchors_sql(template), valid_anchors_params(template))
-        columns = [desc.name for desc in cur.description]
-        return [dict(zip(columns, row)) for row in cur.fetchall()]
+def fetch_valid_anchors(ctx: AppContext, conn, graph, template: Template) -> list[dict]:
+    local_rows = local_anchor_rows(graph, template)
+    if local_rows is not None:
+        return list(local_rows)
+    timeout_sec = int(ctx.config["sampling"].get("anchor_sql_timeout_sec", ctx.config["benchmark"]["plain_timeout_sec"]))
+    timeout_ms = max(0, timeout_sec * 1000)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(f"SET statement_timeout = {timeout_ms}")
+            cur.execute(valid_anchors_sql(template), valid_anchors_params(template))
+            columns = [desc.name for desc in cur.description]
+            return [dict(zip(columns, row)) for row in cur.fetchall()]
+    except Exception:
+        conn.rollback()
+        raise
 
 
 def sample_bindings(ctx: AppContext, template: Template, anchors: list[dict], mode: str, seed: int, tid: str) -> list[dict]:

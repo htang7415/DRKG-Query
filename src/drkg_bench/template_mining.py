@@ -38,6 +38,7 @@ class RelationInfo:
 
 @dataclass
 class GraphIndex:
+    node_ids: list[str]
     node_types: list[str]
     out_adj: list[dict[int, set[int]]]
     in_adj: list[dict[int, set[int]]]
@@ -235,11 +236,13 @@ def _load_graph_index(ctx: AppContext) -> GraphIndex:
         raise BenchmarkError("Preprocess outputs are missing; run phase 2 preprocessing before mining templates")
 
     node_name_to_idx: dict[str, int] = {}
+    node_ids: list[str] = []
     node_types: list[str] = []
     with nodes_path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
         for idx, row in enumerate(reader):
             node_name_to_idx[row["node_id"]] = idx
+            node_ids.append(row["node_id"])
             node_types.append(row["node_type"])
 
     out_adj: list[dict[int, set[int]]] = [dict() for _ in range(len(node_types))]
@@ -290,6 +293,7 @@ def _load_graph_index(ctx: AppContext) -> GraphIndex:
         for rel_idx in rel_idx_to_name
     }
     return GraphIndex(
+        node_ids=node_ids,
         node_types=node_types,
         out_adj=out_adj,
         in_adj=in_adj,
@@ -480,8 +484,12 @@ def _select_length4_with_branch_and_bound(
     best_grounded = -1
     best_templates: list[Template] = []
     exact_evaluations = 0
+    failed_evaluations = 0
+    timeout_failures = 0
+    consecutive_timeouts = 0
     stop_reason = "bound_resolved"
     timeout_sec = int(ctx.config["templates"].get("length4_exact_eval_timeout_sec", 60))
+    timeout_streak_limit = int(ctx.config["templates"].get("length4_timeout_streak_limit", 8))
     _set_statement_timeout(conn, timeout_sec * 1000 if timeout_sec > 0 else 0)
 
     try:
@@ -494,10 +502,11 @@ def _select_length4_with_branch_and_bound(
                 break
             if exact_evaluations >= exact_limit:
                 stop_reason = "exact_evaluation_limit_reached"
-                raise BenchmarkError(
-                    f"Length-4 {family} mining exceeded exact evaluation limit {exact_limit}; "
-                    f"increase templates.{exact_limit_key}"
+                print_status(
+                    f"{_family_stage_label(family, 4)}: stopping after {exact_evaluations} exact evaluations "
+                    f"because templates.{exact_limit_key}={exact_limit}"
                 )
+                break
             if exact_evaluations == 0 or (exact_evaluations + 1) % 10 == 0:
                 print_status(
                     f"{_family_stage_label(family, 4)}: exact candidate {exact_evaluations + 1}/{candidate_count}, "
@@ -514,14 +523,29 @@ def _select_length4_with_branch_and_bound(
                 )
             except Exception as exc:
                 exact_evaluations += 1
+                failed_evaluations += 1
                 conn.rollback()
                 _set_statement_timeout(conn, timeout_sec * 1000 if timeout_sec > 0 else 0)
+                is_timeout = type(exc).__name__ == "QueryCanceled"
+                if is_timeout:
+                    timeout_failures += 1
+                    consecutive_timeouts += 1
+                else:
+                    consecutive_timeouts = 0
                 print_status(
                     f"{_family_stage_label(family, 4)}: skipping candidate after evaluation failure "
                     f"({type(exc).__name__}: {exc})"
                 )
+                if timeout_streak_limit > 0 and consecutive_timeouts >= timeout_streak_limit:
+                    stop_reason = "timeout_streak_limit_reached"
+                    print_status(
+                        f"{_family_stage_label(family, 4)}: stopping after {consecutive_timeouts} consecutive timeouts "
+                        f"(limit={timeout_streak_limit})"
+                    )
+                    break
                 continue
             exact_evaluations += 1
+            consecutive_timeouts = 0
             row = _update_candidate_row(candidate_rows, template, evaluation_stage="branch_and_bound_exact")
             row["upper_bound"] = upper_bound
 
@@ -547,6 +571,8 @@ def _select_length4_with_branch_and_bound(
         "selected_count": 1 if best_templates else 0,
         "mode": "branch_and_bound_exact",
         "exact_evaluations": exact_evaluations,
+        "failed_evaluations": failed_evaluations,
+        "timeout_failures": timeout_failures,
         "stop_reason": stop_reason,
     }
 
@@ -663,20 +689,29 @@ def _evaluate_candidate(
     return template
 
 
+def local_anchor_rows(graph: GraphIndex, template: Template) -> list[dict[str, object]] | None:
+    anchor_counts = _local_anchor_counts(graph, template)
+    if anchor_counts is None:
+        return None
+    rel1 = graph.rel_name_to_idx[template.relation_type_pattern[0]]
+    rows = []
+    for anchor_idx in sorted(anchor_counts, key=lambda idx: graph.node_ids[idx]):
+        rows.append(
+            {
+                "anchor_id": graph.node_ids[anchor_idx],
+                "grounded_match_count": int(anchor_counts[anchor_idx]),
+                "first_edge_degree": len(graph.out_adj[anchor_idx].get(rel1, set())),
+            }
+        )
+    return rows
+
+
 def _local_exact_anchor_stats(
     graph: GraphIndex,
     template: Template,
 ) -> tuple[int, int, float, float, float, float] | None:
-    if template.family == "path" and template.edge_count == 2:
-        rel_seq = tuple(graph.rel_name_to_idx[rel] for rel in template.relation_type_pattern)
-        anchor_counts = _path2_anchor_counts(graph, rel_seq)
-    elif template.family == "path" and template.edge_count == 3:
-        rel_seq = tuple(graph.rel_name_to_idx[rel] for rel in template.relation_type_pattern)
-        anchor_counts = _path3_anchor_counts(graph, rel_seq)
-    elif template.family == "triangle" and template.edge_count == 3:
-        rel_seq = tuple(graph.rel_name_to_idx[rel] for rel in template.relation_type_pattern)
-        anchor_counts = _triangle_anchor_counts(graph, rel_seq)
-    else:
+    anchor_counts = _local_anchor_counts(graph, template)
+    if anchor_counts is None:
         return None
 
     grounded = int(sum(anchor_counts.values()))
@@ -696,6 +731,17 @@ def _local_exact_anchor_stats(
         float(np.percentile(degrees, 95)),
         float(np.max(degrees)),
     )
+
+
+def _local_anchor_counts(graph: GraphIndex, template: Template) -> Counter[int] | None:
+    rel_seq = tuple(graph.rel_name_to_idx[rel] for rel in template.relation_type_pattern)
+    if template.family == "path" and template.edge_count == 2:
+        return _path2_anchor_counts(graph, rel_seq)
+    if template.family == "path" and template.edge_count == 3:
+        return _path3_anchor_counts(graph, rel_seq)
+    if template.family == "triangle" and template.edge_count == 3:
+        return _triangle_anchor_counts(graph, rel_seq)
+    return None
 
 
 def _path2_anchor_counts(graph: GraphIndex, rel_seq: tuple[int, int]) -> Counter[int]:

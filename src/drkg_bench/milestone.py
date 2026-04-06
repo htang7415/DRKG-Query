@@ -194,9 +194,12 @@ def _runtime_summary_rows(
 ) -> list[dict[str, object]]:
     grouped: dict[tuple[str, str], list[float]] = defaultdict(list)
     for row in rows:
-        if row.get("median_ms", "") in {"", None}:
+        median_ms = row.get("med_ms", row.get("median_ms", ""))
+        template_id = row.get("tid", row.get("template_id", ""))
+        regime = row.get("reg", row.get("regime", ""))
+        if median_ms in {"", None} or template_id in {"", None} or regime in {"", None}:
             continue
-        grouped[(row["template_id"], row["regime"])].append(float(row["median_ms"]))
+        grouped[(str(template_id), str(regime))].append(float(median_ms))
 
     summary_rows = []
     for (template_id, regime), values in sorted(grouped.items()):
@@ -246,9 +249,11 @@ def _write_runtime_figure(
     )
     grouped_points: dict[str, list[float]] = defaultdict(list)
     for row in benchmark_rows:
-        if row.get("median_ms", "") in {"", None}:
+        median_ms = row.get("med_ms", row.get("median_ms", ""))
+        regime = row.get("reg", row.get("regime", ""))
+        if median_ms in {"", None} or regime in {"", None}:
             continue
-        grouped_points[_short_regime_label(row["regime"])].append(float(row["median_ms"]))
+        grouped_points[_short_regime_label(str(regime))].append(float(median_ms))
     for index, row in enumerate(rows):
         values = grouped_points.get(str(row["regime"]), [])
         if not values:
