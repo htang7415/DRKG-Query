@@ -2,10 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONFIG_PATH="$ROOT/config.yaml"
-if [[ "${1:-}" == "--config" ]]; then
-  CONFIG_PATH="$2"
-fi
+source "$ROOT/scripts/_config_arg.sh"
+CONFIG_PATH="$(resolve_config_path "$ROOT" "$@")"
 
 SERVICE_MODE="$(awk '
   $1 == "services:" {in_services = 1; next}

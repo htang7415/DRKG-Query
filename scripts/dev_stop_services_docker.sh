@@ -2,10 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONFIG_PATH="$ROOT/config.yaml"
-if [[ "${1:-}" == "--config" ]]; then
-  CONFIG_PATH="$2"
-fi
+source "$ROOT/scripts/_config_arg.sh"
+CONFIG_PATH="$(resolve_config_path "$ROOT" "$@")"
 
 eval "$(python - <<'PY' "$CONFIG_PATH"
 import sys

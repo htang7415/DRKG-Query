@@ -78,8 +78,10 @@ templates:
   anchor_variable_policy: first_node_variable
   min_grounded_matches: 100
   min_valid_anchors: 20
+  select_path4_if_available: false
   path4_branch_and_bound_max_exact_evals: 256
   cycle4_branch_and_bound_max_exact_evals: 256
+  length4_exact_eval_timeout_sec: 60
   select_num_triangles: 2
   select_four_cycle_if_available: true
   ranking:

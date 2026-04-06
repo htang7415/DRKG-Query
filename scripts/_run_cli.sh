@@ -2,17 +2,20 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONFIG_PATH="$ROOT/config.yaml"
+source "$ROOT/scripts/_config_arg.sh"
+CONFIG_PATH="$(resolve_config_path "$ROOT" "$@")"
 COMMAND=""
 SKIP_NEXT=false
 for ARG in "$@"; do
   if [[ "$SKIP_NEXT" == "true" ]]; then
-    CONFIG_PATH="$ARG"
     SKIP_NEXT=false
     continue
   fi
   if [[ "$ARG" == "--config" ]]; then
     SKIP_NEXT=true
+    continue
+  fi
+  if [[ "$ARG" == --config=* ]]; then
     continue
   fi
   if [[ -z "$COMMAND" ]]; then

@@ -430,10 +430,33 @@ def _select_length4_with_branch_and_bound(
     prefix_counts: Counter[tuple[int, int, int]],
     candidate_rows: dict[tuple[str, tuple[str, ...]], dict[str, object]],
 ) -> tuple[list[Template], dict[str, object]]:
+    if family == "path" and not bool(ctx.config["templates"].get("select_path4_if_available", True)):
+        print_status("Skipping path_4 template selection because templates.select_path4_if_available=false")
+        return [], {
+            "family": family,
+            "edge_count": 4,
+            "candidate_count": 0,
+            "selected_count": 0,
+            "mode": "skipped",
+            "exact_evaluations": 0,
+            "stop_reason": "disabled_by_config",
+        }
+
     exact_limit_key = "path4_branch_and_bound_max_exact_evals" if family == "path" else "cycle4_branch_and_bound_max_exact_evals"
     exact_limit = int(ctx.config["templates"][exact_limit_key])
     min_grounded = int(ctx.config["templates"]["min_grounded_matches"])
     min_anchors = int(ctx.config["templates"]["min_valid_anchors"])
+    if exact_limit <= 0:
+        print_status(f"Skipping {_family_stage_label(family, 4)} because templates.{exact_limit_key}={exact_limit}")
+        return [], {
+            "family": family,
+            "edge_count": 4,
+            "candidate_count": 0,
+            "selected_count": 0,
+            "mode": "skipped",
+            "exact_evaluations": 0,
+            "stop_reason": "exact_eval_disabled",
+        }
 
     candidates, candidate_count = _iter_length4_candidates(
         graph,
@@ -458,44 +481,63 @@ def _select_length4_with_branch_and_bound(
     best_templates: list[Template] = []
     exact_evaluations = 0
     stop_reason = "bound_resolved"
+    timeout_sec = int(ctx.config["templates"].get("length4_exact_eval_timeout_sec", 60))
+    _set_statement_timeout(conn, timeout_sec * 1000 if timeout_sec > 0 else 0)
 
-    for rel_seq, upper_bound in candidates:
-        if best_grounded >= min_grounded and upper_bound < best_grounded:
-            print_status(
-                f"{_family_stage_label(family, 4)}: stopping after {exact_evaluations} exact evaluations; "
-                f"remaining upper bound {upper_bound} is below best grounded count {best_grounded}"
-            )
-            break
-        if exact_evaluations >= exact_limit:
-            stop_reason = "exact_evaluation_limit_reached"
-            raise BenchmarkError(
-                f"Length-4 {family} mining exceeded exact evaluation limit {exact_limit}; "
-                f"increase templates.{exact_limit_key}"
-            )
-        if exact_evaluations == 0 or (exact_evaluations + 1) % 10 == 0:
-            print_status(
-                f"{_family_stage_label(family, 4)}: exact candidate {exact_evaluations + 1}/{candidate_count}, "
-                f"current_upper_bound={upper_bound}, best_grounded={best_grounded if best_grounded >= 0 else 'none'}"
-            )
-        template = _evaluate_candidate(
-            conn,
-            graph,
-            relation_mapping,
-            family=family,
-            rel_seq=rel_seq,
-            grounded_override=None,
-        )
-        exact_evaluations += 1
-        row = _update_candidate_row(candidate_rows, template, evaluation_stage="branch_and_bound_exact")
-        row["upper_bound"] = upper_bound
+    try:
+        for rel_seq, upper_bound in candidates:
+            if best_grounded >= min_grounded and upper_bound < best_grounded:
+                print_status(
+                    f"{_family_stage_label(family, 4)}: stopping after {exact_evaluations} exact evaluations; "
+                    f"remaining upper bound {upper_bound} is below best grounded count {best_grounded}"
+                )
+                break
+            if exact_evaluations >= exact_limit:
+                stop_reason = "exact_evaluation_limit_reached"
+                raise BenchmarkError(
+                    f"Length-4 {family} mining exceeded exact evaluation limit {exact_limit}; "
+                    f"increase templates.{exact_limit_key}"
+                )
+            if exact_evaluations == 0 or (exact_evaluations + 1) % 10 == 0:
+                print_status(
+                    f"{_family_stage_label(family, 4)}: exact candidate {exact_evaluations + 1}/{candidate_count}, "
+                    f"current_upper_bound={upper_bound}, best_grounded={best_grounded if best_grounded >= 0 else 'none'}"
+                )
+            try:
+                template = _evaluate_candidate(
+                    conn,
+                    graph,
+                    relation_mapping,
+                    family=family,
+                    rel_seq=rel_seq,
+                    grounded_override=None,
+                )
+            except Exception as exc:
+                exact_evaluations += 1
+                conn.rollback()
+                _set_statement_timeout(conn, timeout_sec * 1000 if timeout_sec > 0 else 0)
+                print_status(
+                    f"{_family_stage_label(family, 4)}: skipping candidate after evaluation failure "
+                    f"({type(exc).__name__}: {exc})"
+                )
+                continue
+            exact_evaluations += 1
+            row = _update_candidate_row(candidate_rows, template, evaluation_stage="branch_and_bound_exact")
+            row["upper_bound"] = upper_bound
 
-        if template.grounded_match_count < min_grounded or template.valid_anchor_count < min_anchors:
-            continue
-        if template.grounded_match_count > best_grounded:
-            best_grounded = template.grounded_match_count
-            best_templates = [template]
-        elif template.grounded_match_count == best_grounded:
-            best_templates.append(template)
+            if template.grounded_match_count < min_grounded or template.valid_anchor_count < min_anchors:
+                continue
+            if template.grounded_match_count > best_grounded:
+                best_grounded = template.grounded_match_count
+                best_templates = [template]
+            elif template.grounded_match_count == best_grounded:
+                best_templates.append(template)
+    finally:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        _set_statement_timeout(conn, 0)
 
     best_templates.sort(key=_ranking_key)
     return best_templates[:1], {
@@ -737,6 +779,11 @@ def _anchor_stats(conn, template: Template) -> tuple[int, float, float, float, f
         float(np.percentile(degrees, 95)),
         float(np.max(degrees)),
     )
+
+
+def _set_statement_timeout(conn, timeout_ms: int) -> None:
+    with conn.cursor() as cur:
+        cur.execute(f"SET statement_timeout = {int(timeout_ms)}")
 
 
 def _seed_candidate_rows(
