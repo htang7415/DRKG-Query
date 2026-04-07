@@ -82,9 +82,13 @@ def verify_results(ctx: AppContext) -> None:
     if len(pg_keys) != len(postgres_rows) or len(neo_keys) != len(neo4j_rows):
         raise BenchmarkError("Duplicate baseline instance keys detected")
 
-    join_keys_by_tid: dict[str, set[str]] = {}
+    join_instance_keys = {(row["tid"], row["reg"], row["bid"], row["ord_idx"]) for row in join_rows}
+    if len(join_instance_keys) != len(join_rows):
+        raise BenchmarkError("Duplicate join-order instance keys detected")
+
+    join_keys_by_tid: dict[str, set[tuple[str, str]]] = {}
     for row in join_rows:
-        join_keys_by_tid.setdefault(row["tid"], set()).add(row["bid"])
+        join_keys_by_tid.setdefault(row["tid"], set()).add((row["reg"], row["bid"]))
     expected_join_rows = 0
     for tid, template in templates_by_tid.items():
         if tid == "P2":

@@ -33,6 +33,7 @@ def load_neo4j(ctx: AppContext, batch_size: int | None = None) -> None:
     paths = ctx.config["paths"]
     if batch_size is None:
         batch_size = int(ctx.config["neo4j"].get("load_batch_size", 10000))
+    clear_batch_size = int(ctx.config["neo4j"].get("clear_batch_size", min(batch_size, 1000)))
     driver = connect_neo4j(ctx)
     relation_mapping = load_relation_mapping(ctx)
     nodes_csv = ctx.path(paths["preprocess_dir"]) / "nodes.csv"
@@ -43,8 +44,8 @@ def load_neo4j(ctx: AppContext, batch_size: int | None = None) -> None:
     try:
         with driver.session() as session:
             print_status("Neo4j load: clearing existing graph")
-            session.run("MATCH (n) DETACH DELETE n")
-            session.run("CREATE CONSTRAINT entity_node_id IF NOT EXISTS FOR (n:Entity) REQUIRE n.node_id IS UNIQUE")
+            _clear_graph_in_batches(session, clear_batch_size)
+            session.run("CREATE CONSTRAINT entity_node_id IF NOT EXISTS FOR (n:Entity) REQUIRE n.node_id IS UNIQUE").consume()
 
             print_status("Neo4j load: loading nodes")
             batch = []
@@ -61,7 +62,7 @@ def load_neo4j(ctx: AppContext, batch_size: int | None = None) -> None:
                             SET n.node_type = row.node_type
                             """,
                             rows=batch,
-                        )
+                        ).consume()
                         node_count += len(batch)
                         if node_count >= next_node_log:
                             print_status(f"Neo4j load: loaded {node_count:,} nodes")
@@ -75,7 +76,7 @@ def load_neo4j(ctx: AppContext, batch_size: int | None = None) -> None:
                         SET n.node_type = row.node_type
                         """,
                         rows=batch,
-                    )
+                    ).consume()
                     node_count += len(batch)
                     if node_count >= next_node_log:
                         print_status(f"Neo4j load: loaded {node_count:,} nodes")
@@ -124,7 +125,20 @@ def _flush_rel_batch(session, rel_type: str, rows: list[dict[str, str]]) -> None
     MATCH (dst:Entity {{node_id: row.dst_id}})
     CREATE (src)-[:`{rel_type}`]->(dst)
     """
-    session.run(query, rows=rows)
+    session.run(query, rows=rows).consume()
+
+
+def _clear_graph_in_batches(session, batch_size: int) -> None:
+    if batch_size <= 0:
+        raise BenchmarkError("neo4j.clear_batch_size must be positive")
+    session.run(
+        f"""
+        MATCH (n)
+        CALL (n) {{
+            DETACH DELETE n
+        }} IN TRANSACTIONS OF {int(batch_size)} ROWS
+        """
+    ).consume()
 
 
 def restart_neo4j(ctx: AppContext) -> None:
