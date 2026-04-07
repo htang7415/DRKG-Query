@@ -1,0 +1,13 @@
+{
+  "edge_count": 5874229,
+  "node_count": 97237,
+  "runtime": "slotted",
+  "settings": {
+    "component_edition": "community",
+    "component_name": "Neo4j Kernel",
+    "component_version": "5.26.0",
+    "configured_heap_size": "8g",
+    "configured_page_cache_size": "8g",
+    "configured_runtime": "slotted"
+  }
+}

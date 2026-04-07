@@ -1,0 +1,16 @@
+{
+  "anchor_degree_count": 284923,
+  "edge_count": 5874229,
+  "max_parallel_workers_per_gather": 0,
+  "node_count": 97237,
+  "parallel_disabled": true,
+  "settings": {
+    "effective_cache_size": "16GB",
+    "maintenance_work_mem": "2GB",
+    "max_parallel_workers_per_gather": "0",
+    "server_version": "16.13 (Debian 16.13-1.pgdg13+1)",
+    "shared_buffers": "4GB",
+    "work_mem": "256MB"
+  },
+  "typed_edge_count": 5874229
+}

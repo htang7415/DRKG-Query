@@ -1,0 +1,19 @@
+{
+  "dataset_analysis_json": "results/02_prepare/preprocess/dataset_analysis.json",
+  "dataset_overview_csv": "results/02_prepare/preprocess/dataset_overview.csv",
+  "duplicate_rows_dropped": 3,
+  "edges_csv": "results/02_prepare/preprocess/edges.csv",
+  "kept_rows": 5874229,
+  "nodes_csv": "results/02_prepare/preprocess/nodes.csv",
+  "raw_row_limit": null,
+  "raw_rows": 5874261,
+  "relation_type_map_csv": "results/02_prepare/preprocess/relation_type_map.csv",
+  "rows_with_empty_endpoint_dropped": 29,
+  "self_loops_kept": 3499,
+  "sqlite_path": "/dev/shm/drkg_prepare/preprocess.sqlite",
+  "top_node_types_csv": "results/02_prepare/preprocess/top_node_types.csv",
+  "top_relations_csv": "results/02_prepare/preprocess/top_relations.csv",
+  "unique_edges": 5874229,
+  "unique_nodes": 97237,
+  "unique_relations": 107
+}

@@ -1,5 +1,4 @@
 # Benchmark outputs
-results/
 *.tsv
 
 # Python caches

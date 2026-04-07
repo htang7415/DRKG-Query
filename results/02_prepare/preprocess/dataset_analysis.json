@@ -1,0 +1,109 @@
+{
+  "in_degree_summary": {
+    "count": 77515,
+    "max": 8156.0,
+    "median": 8.0,
+    "min": 1.0,
+    "p95": 414.0
+  },
+  "node_type_count": 13,
+  "out_degree_summary": {
+    "count": 57057,
+    "max": 23866.0,
+    "median": 5.0,
+    "min": 1.0,
+    "p95": 516.0
+  },
+  "relation_type_count": 107,
+  "top_node_types": [
+    {
+      "node_count": 39219,
+      "node_type": "Gene"
+    },
+    {
+      "node_count": 24313,
+      "node_type": "Compound"
+    },
+    {
+      "node_count": 11381,
+      "node_type": "Biological Process"
+    },
+    {
+      "node_count": 5701,
+      "node_type": "Side Effect"
+    },
+    {
+      "node_count": 5103,
+      "node_type": "Disease"
+    },
+    {
+      "node_count": 4048,
+      "node_type": "Atc"
+    },
+    {
+      "node_count": 2884,
+      "node_type": "Molecular Function"
+    },
+    {
+      "node_count": 1822,
+      "node_type": "Pathway"
+    },
+    {
+      "node_count": 1391,
+      "node_type": "Cellular Component"
+    },
+    {
+      "node_count": 415,
+      "node_type": "Symptom"
+    }
+  ],
+  "top_relation_types": [
+    {
+      "edge_count": 1379271,
+      "rel_type": "DRUGBANK::ddi-interactor-in::Compound:Compound"
+    },
+    {
+      "edge_count": 559504,
+      "rel_type": "Hetionet::GpBP::Gene:Biological Process"
+    },
+    {
+      "edge_count": 526407,
+      "rel_type": "Hetionet::AeG::Anatomy:Gene"
+    },
+    {
+      "edge_count": 400426,
+      "rel_type": "STRING::REACTION::Gene:Gene"
+    },
+    {
+      "edge_count": 343533,
+      "rel_type": "STRING::CATALYSIS::Gene:Gene"
+    },
+    {
+      "edge_count": 315875,
+      "rel_type": "STRING::BINDING::Gene:Gene"
+    },
+    {
+      "edge_count": 310690,
+      "rel_type": "STRING::OTHER::Gene:Gene"
+    },
+    {
+      "edge_count": 265672,
+      "rel_type": "Hetionet::Gr>G::Gene:Gene"
+    },
+    {
+      "edge_count": 147164,
+      "rel_type": "Hetionet::GiG::Gene:Gene"
+    },
+    {
+      "edge_count": 138944,
+      "rel_type": "Hetionet::CcSE::Compound:Side Effect"
+    }
+  ],
+  "total_degree_summary": {
+    "count": 97237,
+    "max": 23879.0,
+    "median": 5.0,
+    "min": 1.0,
+    "p95": 697.0
+  }
+}

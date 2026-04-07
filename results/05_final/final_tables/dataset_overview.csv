@@ -1,0 +1,11 @@
+metric,value
+raw_rows,5874261
+kept_rows,5874229
+unique_nodes,97237
+unique_edges,5874229
+unique_relations,107
+dup_rows,3
+empty_endpoints,29
+self_loops,3499
+deg_med,5
+deg_p95,697

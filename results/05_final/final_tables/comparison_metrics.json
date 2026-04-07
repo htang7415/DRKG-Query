@@ -1,0 +1,5 @@
+{
+  "matched_instances": 160,
+  "matching_output_cardinality_instances": 140,
+  "mean_neo_over_pg_speedup": 0.36451298172491853
+}

@@ -1,0 +1,95 @@
+{
+  "checks": [
+    {
+      "detail": "3.11.7",
+      "name": "python",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/data/htang228/course/DRKG-Query/data/drkg.tsv",
+      "name": "raw_drkg",
+      "status": "ok"
+    },
+    {
+      "detail": "docker",
+      "name": "service_mode",
+      "status": "ok"
+    },
+    {
+      "detail": "true",
+      "name": "service_auto_start",
+      "status": "ok"
+    },
+    {
+      "detail": "not found",
+      "name": "psql_cli",
+      "status": "warn"
+    },
+    {
+      "detail": "not found",
+      "name": "neo4j_cli",
+      "status": "warn"
+    },
+    {
+      "detail": "/usr/bin/docker",
+      "name": "docker_cli",
+      "status": "ok"
+    },
+    {
+      "detail": "config:password_value",
+      "name": "postgres_password_source",
+      "status": "ok"
+    },
+    {
+      "detail": "config:password_value",
+      "name": "neo4j_password_source",
+      "status": "ok"
+    },
+    {
+      "detail": "bash scripts/dev_restart_postgres_docker.sh --config config.yaml",
+      "name": "postgres_restart",
+      "status": "ok"
+    },
+    {
+      "detail": "bash scripts/dev_restart_neo4j_docker.sh --config config.yaml",
+      "name": "neo4j_restart",
+      "status": "ok"
+    },
+    {
+      "detail": "imported",
+      "name": "yaml",
+      "status": "ok"
+    },
+    {
+      "detail": "imported",
+      "name": "psycopg",
+      "status": "ok"
+    },
+    {
+      "detail": "imported",
+      "name": "neo4j",
+      "status": "ok"
+    },
+    {
+      "detail": "imported",
+      "name": "matplotlib",
+      "status": "ok"
+    },
+    {
+      "detail": "imported",
+      "name": "networkx",
+      "status": "ok"
+    },
+    {
+      "detail": "imported",
+      "name": "numpy",
+      "status": "ok"
+    },
+    {
+      "detail": "imported",
+      "name": "pulp",
+      "status": "ok"
+    }
+  ],
+  "config_path": "config.yaml"
+}

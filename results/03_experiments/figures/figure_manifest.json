@@ -1,0 +1,9 @@
+{
+  "dpi": 600,
+  "files": [
+    "engine_runtime.png",
+    "join_order_effect.png",
+    "speedup.png"
+  ],
+  "font_size": 16
+}

@@ -1,0 +1,66 @@
+{
+  "candidate_count": 135676,
+  "elapsed_sec": 1362.272,
+  "families": [
+    {
+      "candidate_count": 4032,
+      "edge_count": 2,
+      "elapsed_sec": 3.336,
+      "family": "path",
+      "mode": "exact_local"
+    },
+    {
+      "candidate_count": 142512,
+      "edge_count": 3,
+      "elapsed_sec": 1197.017,
+      "family": "path",
+      "mode": "exact_local"
+    },
+    {
+      "candidate_count": 32405,
+      "edge_count": 3,
+      "elapsed_sec": 1197.017,
+      "family": "triangle",
+      "mode": "exact_local"
+    },
+    {
+      "edge_count": 2,
+      "evaluated_grounded_groups": 1,
+      "family": "path",
+      "mode": "exact_local_then_exact_anchor",
+      "selected_count": 1
+    },
+    {
+      "edge_count": 3,
+      "evaluated_grounded_groups": 1,
+      "family": "path",
+      "mode": "exact_local_then_exact_anchor",
+      "selected_count": 1
+    },
+    {
+      "edge_count": 3,
+      "evaluated_grounded_groups": 2,
+      "family": "triangle",
+      "mode": "exact_local_then_exact_anchor",
+      "selected_count": 2
+    },
+    {
+      "candidate_count": 0,
+      "edge_count": 4,
+      "exact_evaluations": 0,
+      "family": "path",
+      "mode": "skipped",
+      "selected_count": 0,
+      "stop_reason": "disabled_by_config"
+    }
+  ],
+  "min_grounded_matches": 100,
+  "min_valid_anchors": 20,
+  "selected_count": 4,
+  "selected_template_ids": [
+    "path_2_DRUGBANK::ddi-interactor-in::Compound:Compound__DRUGBANK::ddi-interactor-in::Compound:Compound",
+    "path_3_DRUGBANK::ddi-interactor-in::Compound:Compound__DRUGBANK::ddi-interactor-in::Compound:Compound__DRUGBANK::ddi-interactor-in::Compound:Compound",
+    "triangle_STRING::REACTION::Gene:Gene__STRING::REACTION::Gene:Gene__STRING::REACTION::Gene:Gene",
+    "triangle_STRING::REACTION::Gene:Gene__STRING::CATALYSIS::Gene:Gene__STRING::REACTION::Gene:Gene"
+  ]
+}

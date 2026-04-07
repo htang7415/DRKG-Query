@@ -1,0 +1,31 @@
+{
+  "final_figures": [
+    "agm_runtime.png",
+    "dataset_profile.png",
+    "engine_runtime.png",
+    "join_order_effect.png",
+    "speedup.png",
+    "structure_runtime.png",
+    "template_profile.png",
+    "work_runtime.png"
+  ],
+  "final_tables": [
+    "candidate_summary.csv",
+    "comparison_metrics.json",
+    "dataset_analysis.json",
+    "dataset_overview.csv",
+    "engine_summary.csv",
+    "instance_summary.csv",
+    "join_order_summary.csv",
+    "mining_summary.json",
+    "preprocess_summary.json",
+    "selected_templates.csv",
+    "selected_templates.yaml",
+    "structure_summary.csv",
+    "summary_metrics.json",
+    "template_summary.csv",
+    "theory_summary.json",
+    "top_node_types.csv",
+    "top_relations.csv"
+  ]
+}

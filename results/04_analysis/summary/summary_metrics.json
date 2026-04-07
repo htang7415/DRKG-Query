@@ -1,0 +1,11 @@
+{
+  "comparison_rows": 8,
+  "instance_rows": 320,
+  "join_order_instances": 210,
+  "join_order_summary_rows": 7,
+  "neo4j_baseline_instances": 160,
+  "postgres_baseline_instances": 160,
+  "structure_summary_rows": 8,
+  "template_summary_rows": 16,
+  "theory_instances": 160
+}

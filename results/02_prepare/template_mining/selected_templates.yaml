@@ -1,0 +1,164 @@
+templates:
+- template_id: path_2_DRUGBANK::ddi-interactor-in::Compound:Compound__DRUGBANK::ddi-interactor-in::Compound:Compound
+  family: path
+  edge_count: 2
+  node_vars:
+  - v1
+  - v2
+  - v3
+  anchor_var: v1
+  node_type_pattern:
+  - Compound
+  - Compound
+  - Compound
+  endpoint_type_pattern:
+  - Compound:Compound
+  - Compound:Compound
+  relation_type_pattern:
+  - DRUGBANK::ddi-interactor-in::Compound:Compound
+  - DRUGBANK::ddi-interactor-in::Compound:Compound
+  edges:
+  - alias: e1
+    src_var: v1
+    dst_var: v2
+    rel_type: DRUGBANK::ddi-interactor-in::Compound:Compound
+    neo4j_rel_type: REL_DRUGBANK_DDI_INTERACTOR_IN_COMPOUND_COMPOUND__CF75D94E
+  - alias: e2
+    src_var: v2
+    dst_var: v3
+    rel_type: DRUGBANK::ddi-interactor-in::Compound:Compound
+    neo4j_rel_type: REL_DRUGBANK_DDI_INTERACTOR_IN_COMPOUND_COMPOUND__CF75D94E
+  grounded_match_count: 503732205
+  valid_anchor_count: 3978
+  anchor_degree_min: 1.0
+  anchor_degree_median: 176.0
+  anchor_degree_p95: 1212.1499999999996
+  anchor_degree_max: 2325.0
+- template_id: path_3_DRUGBANK::ddi-interactor-in::Compound:Compound__DRUGBANK::ddi-interactor-in::Compound:Compound__DRUGBANK::ddi-interactor-in::Compound:Compound
+  family: path
+  edge_count: 3
+  node_vars:
+  - v1
+  - v2
+  - v3
+  - v4
+  anchor_var: v1
+  node_type_pattern:
+  - Compound
+  - Compound
+  - Compound
+  - Compound
+  endpoint_type_pattern:
+  - Compound:Compound
+  - Compound:Compound
+  - Compound:Compound
+  relation_type_pattern:
+  - DRUGBANK::ddi-interactor-in::Compound:Compound
+  - DRUGBANK::ddi-interactor-in::Compound:Compound
+  - DRUGBANK::ddi-interactor-in::Compound:Compound
+  edges:
+  - alias: e1
+    src_var: v1
+    dst_var: v2
+    rel_type: DRUGBANK::ddi-interactor-in::Compound:Compound
+    neo4j_rel_type: REL_DRUGBANK_DDI_INTERACTOR_IN_COMPOUND_COMPOUND__CF75D94E
+  - alias: e2
+    src_var: v2
+    dst_var: v3
+    rel_type: DRUGBANK::ddi-interactor-in::Compound:Compound
+    neo4j_rel_type: REL_DRUGBANK_DDI_INTERACTOR_IN_COMPOUND_COMPOUND__CF75D94E
+  - alias: e3
+    src_var: v3
+    dst_var: v4
+    rel_type: DRUGBANK::ddi-interactor-in::Compound:Compound
+    neo4j_rel_type: REL_DRUGBANK_DDI_INTERACTOR_IN_COMPOUND_COMPOUND__CF75D94E
+  grounded_match_count: 140435650562
+  valid_anchor_count: 3974
+  anchor_degree_min: 1.0
+  anchor_degree_median: 176.0
+  anchor_degree_p95: 1212.35
+  anchor_degree_max: 2325.0
+- template_id: triangle_STRING::REACTION::Gene:Gene__STRING::REACTION::Gene:Gene__STRING::REACTION::Gene:Gene
+  family: triangle
+  edge_count: 3
+  node_vars:
+  - v1
+  - v2
+  - v3
+  anchor_var: v1
+  node_type_pattern:
+  - Gene
+  - Gene
+  - Gene
+  endpoint_type_pattern:
+  - Gene:Gene
+  - Gene:Gene
+  - Gene:Gene
+  relation_type_pattern:
+  - STRING::REACTION::Gene:Gene
+  - STRING::REACTION::Gene:Gene
+  - STRING::REACTION::Gene:Gene
+  edges:
+  - alias: e1
+    src_var: v1
+    dst_var: v2
+    rel_type: STRING::REACTION::Gene:Gene
+    neo4j_rel_type: REL_STRING_REACTION_GENE_GENE__3F08C05C
+  - alias: e2
+    src_var: v2
+    dst_var: v3
+    rel_type: STRING::REACTION::Gene:Gene
+    neo4j_rel_type: REL_STRING_REACTION_GENE_GENE__3F08C05C
+  - alias: e3
+    src_var: v3
+    dst_var: v1
+    rel_type: STRING::REACTION::Gene:Gene
+    neo4j_rel_type: REL_STRING_REACTION_GENE_GENE__3F08C05C
+  grounded_match_count: 50701812
+  valid_anchor_count: 5070
+  anchor_degree_min: 1.0
+  anchor_degree_median: 50.0
+  anchor_degree_p95: 251.0
+  anchor_degree_max: 1000.0
+- template_id: triangle_STRING::REACTION::Gene:Gene__STRING::CATALYSIS::Gene:Gene__STRING::REACTION::Gene:Gene
+  family: triangle
+  edge_count: 3
+  node_vars:
+  - v1
+  - v2
+  - v3
+  anchor_var: v1
+  node_type_pattern:
+  - Gene
+  - Gene
+  - Gene
+  endpoint_type_pattern:
+  - Gene:Gene
+  - Gene:Gene
+  - Gene:Gene
+  relation_type_pattern:
+  - STRING::REACTION::Gene:Gene
+  - STRING::CATALYSIS::Gene:Gene
+  - STRING::REACTION::Gene:Gene
+  edges:
+  - alias: e1
+    src_var: v1
+    dst_var: v2
+    rel_type: STRING::REACTION::Gene:Gene
+    neo4j_rel_type: REL_STRING_REACTION_GENE_GENE__3F08C05C
+  - alias: e2
+    src_var: v2
+    dst_var: v3
+    rel_type: STRING::CATALYSIS::Gene:Gene
+    neo4j_rel_type: REL_STRING_CATALYSIS_GENE_GENE__A762D9CF
+  - alias: e3
+    src_var: v3
+    dst_var: v1
+    rel_type: STRING::REACTION::Gene:Gene
+    neo4j_rel_type: REL_STRING_REACTION_GENE_GENE__3F08C05C
+  grounded_match_count: 42863115
+  valid_anchor_count: 4556
+  anchor_degree_min: 1.0
+  anchor_degree_median: 59.0
+  anchor_degree_p95: 257.0
+  anchor_degree_max: 1000.0

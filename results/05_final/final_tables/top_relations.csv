@@ -1,0 +1,11 @@
+rel_type,edge_count
+DRUGBANK::ddi-interactor-in::Compound:Compound,1379271
+Hetionet::GpBP::Gene:Biological Process,559504
+Hetionet::AeG::Anatomy:Gene,526407
+STRING::REACTION::Gene:Gene,400426
+STRING::CATALYSIS::Gene:Gene,343533
+STRING::BINDING::Gene:Gene,315875
+STRING::OTHER::Gene:Gene,310690
+Hetionet::Gr>G::Gene:Gene,265672
+Hetionet::GiG::Gene:Gene,147164
+Hetionet::CcSE::Compound:Side Effect,138944
