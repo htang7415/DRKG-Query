@@ -15,6 +15,8 @@ This project compares PostgreSQL, Neo4j, and DuckDB on DRKG query workloads. It 
 
 The benchmark uses the [Drug Repurposing Knowledge Graph (DRKG)](https://github.com/gnn4dr/DRKG), a directed biomedical knowledge graph whose nodes include entities such as compounds, genes, diseases, and biological processes. Edges are typed relations from the raw DRKG triples.
 
+![Interactions in the DRKG](results/02_prepare/figures/Interactions_in_the_DRKG.png)
+
 The pipeline treats `data/drkg.tsv` as the authoritative directed edge list. Metadata files such as the relation glossary and entity-source table are used for context, not for changing edge direction. During preprocessing, the project:
 
 - derives each node type from the prefix before `::`
