@@ -11,6 +11,19 @@ This project compares PostgreSQL, Neo4j, and DuckDB on DRKG query workloads. It 
 5. **Theory lens:** classify templates by acyclic/cyclic structure and compare runtime against output size, intermediate work, skew, and AGM-style bounds.
 6. **Results:** show that skew and intermediate expansion dominate the simple acyclic/cyclic story.
 
+## Dataset
+
+The benchmark uses the Drug Repurposing Knowledge Graph (DRKG), a directed biomedical knowledge graph whose nodes include entities such as compounds, genes, diseases, and biological processes. Edges are typed relations from the raw DRKG triples.
+
+The pipeline treats `data/drkg.tsv` as the authoritative directed edge list. Metadata files such as the relation glossary and entity-source table are used for context, not for changing edge direction. During preprocessing, the project:
+
+- derives each node type from the prefix before `::`
+- drops rows with empty local endpoint identifiers
+- deduplicates exact `(source, relation, destination)` triples
+- keeps self-loops in storage, while benchmark templates require distinct node variables
+
+The saved full run contains `5,874,229` unique directed edges, `97,237` nodes, and `107` relation types after cleaning.
+
 ## Run Commands
 
 Set up the environment:
@@ -49,7 +62,7 @@ bash scripts/_run_cli.sh verify-results --config config.yaml
 
 ## Key Results
 
-The saved full run uses `5,874,229` unique DRKG edges, `97,237` nodes, and `107` relations. The fixed-query benchmark has `600` matched instances across five templates, two sampling regimes, and three engines.
+The fixed-query benchmark has `600` matched instances across five templates, two sampling regimes, and three engines.
 
 | Result slice | PostgreSQL median | Neo4j median | DuckDB median | Takeaway |
 | --- | ---: | ---: | ---: | --- |
