@@ -19,7 +19,9 @@ The benchmark uses the [Drug Repurposing Knowledge Graph (DRKG)](https://github.
   <img src="results/02_prepare/figures/Interactions_in_the_DRKG.png" alt="Interactions in the DRKG" width="560">
 </p>
 
-The pipeline treats `data/drkg.tsv` as the authoritative directed edge list. Metadata files such as the relation glossary and entity-source table are used for context, not for changing edge direction. During preprocessing, the project:
+DRKG is stored as `(h, r, t)` triplets: `h` is the head/source entity, `r` is the relation type, and `t` is the tail/target entity. For example, a drug-repurposing edge has the form `(Compound, relation_type, Disease)`, such as `(Compound:Remdesivir, treats, Disease:COVID-19)` conceptually.
+
+The pipeline treats `data/drkg.tsv` as the authoritative directed edge list over biomedical entity types such as compounds, diseases, genes, anatomy, pathways, and side effects. Metadata files such as the relation glossary and entity-source table are used for context, not for changing edge direction. During preprocessing, the project:
 
 - derives each node type from the prefix before `::`
 - drops rows with empty local endpoint identifiers
