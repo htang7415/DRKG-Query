@@ -15,7 +15,9 @@ This project compares PostgreSQL, Neo4j, and DuckDB on DRKG query workloads. It 
 
 The benchmark uses the [Drug Repurposing Knowledge Graph (DRKG)](https://github.com/gnn4dr/DRKG), a directed biomedical knowledge graph whose nodes include entities such as compounds, genes, diseases, and biological processes. Edges are typed relations from the raw DRKG triples.
 
-![Interactions in the DRKG](results/02_prepare/figures/Interactions_in_the_DRKG.png)
+<p align="center">
+  <img src="results/02_prepare/figures/Interactions_in_the_DRKG.png" alt="Interactions in the DRKG" width="720">
+</p>
 
 The pipeline treats `data/drkg.tsv` as the authoritative directed edge list. Metadata files such as the relation glossary and entity-source table are used for context, not for changing edge direction. During preprocessing, the project:
 
@@ -73,15 +75,21 @@ The fixed-query benchmark has `600` matched instances across five templates, two
 | `C4 / hub` | `42.764 ms` | `18.733 ms` | `12.468 ms` | Cyclic does not automatically mean harder. |
 | `T1 / uniform` | `3.383 ms` | `28.538 ms` | `16.086 ms` | PostgreSQL is very strong on small selective joins. |
 
-![Engine runtime comparison](results/05_final/final_figures/2_engine_runtime.png)
+<p align="center">
+  <img src="results/05_final/final_figures/2_engine_runtime.png" alt="Engine runtime comparison" width="900">
+</p>
 
 The cross-engine result is not a simple graph-versus-SQL story. DuckDB is fastest on most fixed-query slices, PostgreSQL beats Neo4j on most slices, and Neo4j has a few lower medians such as `C4 / hub`.
 
-![Acyclic versus cyclic runtime](results/05_final/final_figures/3_structure_runtime.png)
+<p align="center">
+  <img src="results/05_final/final_figures/3_structure_runtime.png" alt="Acyclic versus cyclic runtime" width="900">
+</p>
 
 The structural result is the main lesson: the acyclic `P3` path is much harder than the triangle and 4-cycle workloads. Runtime follows skew, output size, and intermediate expansion more than the acyclic-versus-cyclic label.
 
-![PostgreSQL join-order effect](results/05_final/final_figures/5_join_order_effect.png)
+<p align="center">
+  <img src="results/05_final/final_figures/5_join_order_effect.png" alt="PostgreSQL join-order effect" width="820">
+</p>
 
 PostgreSQL join order matters. For `P3`, cross-product-inducing forced orders time out on every attempted binding, while connected/default orders often complete.
 
@@ -92,6 +100,8 @@ PostgreSQL join order matters. For `P3`, cross-product-inducing forced orders ti
 | Uniform, depth 2 | `3` | `2.083 ms` | `17.152 ms` | `4.345 ms` | Uniform anchors stay tiny. |
 | Uniform, depth 3 | `3` | `0.831 ms` | `11.459 ms` | `2.891 ms` | Anchor choice matters more than depth here. |
 
-![Bounded reachability runtime](results/05_final/final_figures/6_reachability_runtime.png)
+<p align="center">
+  <img src="results/05_final/final_figures/6_reachability_runtime.png" alt="Bounded reachability runtime" width="860">
+</p>
 
 The resulting storyline is practical: benchmark difficulty is driven by skew, output size, and intermediate expansion more than by graph shape alone.
