@@ -10,20 +10,21 @@ Acyclic templates should be more stable than cyclic templates under the same num
 
 ## 3. Systems and Reproducibility
 
-Run both systems on one machine and report CPU, RAM, storage, OS, PostgreSQL version, and Neo4j 5.x Community Edition version.
+Run both systems on one machine through Docker-managed local services and report the fixed DBMS configuration captured in the result package.
 
-Use:
+The executed project uses:
 
 - PostgreSQL with parallel query disabled
 - Neo4j Community Edition with `CYPHER runtime=slotted` for every benchmark query
-- The separate Neo4j `PROFILE` pass for each query instance must show `Runtime SLOTTED`
-- Install PostgreSQL and Neo4j locally on the benchmark machine
-- Create one dedicated local PostgreSQL role and one project database
+- A separate Neo4j `PROFILE` pass after successful timing runs; in the saved results, these passes failed runtime verification and Neo4j plan-work metrics are unavailable
+- Docker service mode with PostgreSQL 16 and Neo4j 5.26.0 Community Edition
+- One dedicated PostgreSQL role and project database
 - Use one authenticated local Neo4j account for the project instance
 - Keep both systems bound to `localhost` unless remote access is explicitly needed
-- Report and keep fixed across all runs the main memory/cache settings: PostgreSQL `shared_buffers`, `work_mem`, `effective_cache_size`, and any nondefault planner settings; Neo4j heap size and page-cache size
-- Use either defaults or one manually tuned configuration per system chosen before benchmarking; do not retune per template, regime, binding, or engine pass
-- The benchmark log must record the exact DBMS configuration, the restart procedure, and whether an OS page-cache flush was actually available on that machine
+- Fixed PostgreSQL settings: `shared_buffers=4GB`, `work_mem=256MB`, `maintenance_work_mem=2GB`, `effective_cache_size=16GB`, and `max_parallel_workers_per_gather=0`
+- Fixed Neo4j settings: heap size `8g`, page-cache size `8g`, and configured runtime `slotted`
+- Programmatic DBMS restart before each query instance using the Docker restart scripts in `scripts/`
+- OS page-cache flush was attempted only when configured; the saved full-run config has no flush command configured, so `flush_ok=false` is recorded
 
 ## 4. Data Model
 
@@ -51,6 +52,7 @@ Use:
 - Keep self-loops in storage, but benchmark templates enforce pairwise-distinct node variables, so self-loops cannot satisfy benchmark edges
 - Use `relation_glossary.tsv` and `entity2src.tsv` only as metadata tables; do not infer edge direction from `relation_glossary.tsv`
 - The `Connected entity-types` column in `relation_glossary.tsv` may disagree with the actual `(src_id, dst_id)` direction in `drkg.tsv` for some relations, so any endpoint-type checks must be derived from `drkg.tsv`
+- The executed preprocessing kept 5,874,229 unique edges, 97,237 unique nodes, and 107 unique relations; it dropped 29 rows with empty endpoint identifiers and 3 duplicate triples, and kept 3,499 self-loops in storage
 
 For theory and query specification, each relation type is treated logically as a filtered binary relation:
 
@@ -68,12 +70,12 @@ Use paired SQL and Cypher templates with identical semantics.
 
 - 2-edge path
 - 3-edge path
-- 4-edge path
 
 **Cyclic templates:**
 
 - 2 triangle templates
-- 1 four-cycle template, contingent on the threshold in Section 6
+
+The saved full-run configuration disables 4-edge path and 4-cycle selection, so the executed workload contains four templates: `P2`, `P3`, `T1`, and `T2`.
 
 **Parameter regimes:**
 
@@ -97,7 +99,9 @@ Each template designates one anchor variable, chosen to be the first node variab
 
 Run this first.
 
-Mine candidate typed paths of lengths 2, 3, and 4, plus candidate typed triangles and typed 4-cycles, directly from the cleaned, deduplicated DRKG load defined in Section 4. A candidate template is identified by its ordered relation-type pattern together with its ordered endpoint-type pattern under the benchmark distinctness rules.
+Mine candidate typed paths of lengths 2 and 3 plus candidate typed triangles directly from the cleaned, deduplicated DRKG load defined in Section 4. A candidate template is identified by its ordered relation-type pattern together with its ordered endpoint-type pattern under the benchmark distinctness rules.
+
+The implementation has configuration fields for length-4 paths and 4-cycles, but in the saved full run both are disabled (`select_path4_if_available=false` and `select_four_cycle_if_available=false`).
 
 Ordering convention for candidate patterns:
 
@@ -116,16 +120,21 @@ For each candidate pattern, report:
 Qualification rules:
 
 - A path or triangle candidate qualifies only if it has at least 100 grounded matches and at least 20 valid anchors after the Section 4 cleaning and deduplication rules
-- A 4-cycle candidate qualifies only if it has at least 100 grounded matches and at least 20 valid anchors after the same rules
 
 Selection rules:
 
-- For each path length, select the highest-ranked qualifying path candidate as the benchmark path template of that length
+- For each enabled path length, select the highest-ranked qualifying path candidate as the benchmark path template of that length
 - Select the two highest-ranked qualifying triangle candidates as the benchmark triangle templates
-- If any 4-cycle qualifies, select the highest-ranked qualifying 4-cycle candidate as the benchmark 4-cycle template; otherwise the final workload is paths plus triangles only
 - Ranking is by grounded match count descending, then valid-anchor count descending, then relation-type pattern under element-wise lexicographic tuple comparison, then endpoint-type pattern under the same element-wise tuple comparison
 
 Freeze the final template set before benchmarking.
+
+The executed mining step selected:
+
+- `P2`: 2-edge path, 503,732,205 grounded matches and 3,978 valid anchors
+- `P3`: 3-edge path, 140,435,650,562 grounded matches and 3,974 valid anchors
+- `T1`: triangle, 50,701,812 grounded matches and 5,070 valid anchors
+- `T2`: triangle, 42,863,115 grounded matches and 4,556 valid anchors
 
 ## 7. Metrics
 
@@ -139,8 +148,10 @@ Freeze the final template set before benchmarking.
 
 - PostgreSQL buffer hits from `EXPLAIN (ANALYZE, BUFFERS)`
 - PostgreSQL intermediate-work proxy: sum of `Actual Rows × Actual Loops` over plan nodes
-- Neo4j total DB hits from `PROFILE`
-- Neo4j intermediate-work proxy: sum of operator row counts from `PROFILE`
+- Neo4j total DB hits from `PROFILE`, when the profile pass succeeds
+- Neo4j intermediate-work proxy: sum of operator row counts from `PROFILE`, when the profile pass succeeds
+
+In the saved results, Neo4j timing and output-cardinality results are available for successful plain executions, but Neo4j `PROFILE` instrumentation failed runtime verification for successful timed rows. Therefore Neo4j DB-hit and operator-work columns are empty in the final CSVs.
 
 ## 8. Measurement Protocol
 
@@ -175,12 +186,16 @@ The instrumented execution is excluded from wall-clock timing because it perturb
 - Baseline benchmarking: 20 sampled bindings per template-regime, without replacement when enough valid anchors exist; otherwise use all valid anchors and report the shortfall
 - Join-order study: 5 sampled bindings per template-regime, with the same rule
 
-**Nominal experiment budget, if a 4-cycle qualifies and every template-regime has enough valid anchors:**
+**Executed experiment budget:**
 
-- Baseline: 480 query instances (6 templates × 2 regimes × 20 bindings × 2 engines)
-- PostgreSQL join-order study: 710 query instances (660 forced-order instances + 50 default-plan comparator instances)
+- Baseline: 320 query instances (4 templates × 2 regimes × 20 bindings × 2 engines)
+- PostgreSQL join-order study: 210 query instances
+- PostgreSQL baseline rows: 160
+- Neo4j baseline rows: 160
+- Final comparison rows: 8
+- Theory rows: 160
 
-The 50 default-plan comparator instances use the same 5 bindings as the forced-order study, so the default-vs-forced comparison is matched.
+The default-plan comparator instances use the same 5 bindings as the forced-order study, so the default-vs-forced comparison is matched.
 
 ## 9. Theory Lens
 
@@ -195,7 +210,8 @@ For each template:
 The most direct structure comparison is:
 
 - 3-edge path vs triangle for the same join count
-- 4-edge path vs 4-cycle if the 4-cycle qualifies
+
+The executed project compares the 3-edge path against the two selected triangle templates. No 4-edge path or 4-cycle comparison is present in the saved results.
 
 ## 10. Join-Order Study in PostgreSQL
 
@@ -215,26 +231,32 @@ Force join order with fully parenthesized left-deep SQL plus `join_collapse_limi
 - 2-edge path is excluded because it has only one join and therefore no nontrivial join-order choice
 - 3-edge path: all 6 left-deep orders
 - Each triangle: all 6 left-deep orders
-- Each 4-relation template (4-edge path, and 4-cycle if it qualifies): all 24 left-deep orders
 
-For each 4-relation template, classify the 24 orders into:
+For the 3-edge path, disconnected relation orders are classified as:
 
 - **Connected-prefix orders**, where each newly joined relation shares at least one variable with the current intermediate result
 - **Cross-product-inducing orders**, where some step joins a relation sharing no variable with the current intermediate result
 
 These cross-product-inducing orders are intentional and quantify how badly poor join orders can blow up intermediate work.
 
+In the saved results, the join-order study has 210 rows. The successful summary includes connected/default rows for `P3`, `T1`, and `T2`; the `P3` cross-product class timed out for all 20 attempted instances.
+
 ## 11. Deliverables
 
 - Deterministic preprocessing script that cleans and deduplicates `drkg.tsv` and emits the Neo4j relation-type mapping
 - Neo4j ingestion and indexing scripts
 - PostgreSQL ingestion and indexing scripts
-- Paired SQL and Cypher templates
+- Paired SQL and Cypher templates for the selected path and triangle workloads
 - Template-mining and selection script
 - Parameter samplers
 - Benchmark harness with CSV logging
-- Final report linking results to query structure, AGM bounds, skew, and join-order sensitivity
+- Final result package under `results/05_final/` with manifest, config snapshot, final tables, and final figures
+
+The final package contains:
+
+- Tables: selected templates, candidate summary, preprocess and dataset summaries, engine comparison, instance summary, template and structure summaries, join-order summary, theory summary, and run metrics
+- Figures: dataset profile, template profile, engine runtime, speedup, join-order effect, structure runtime, AGM/runtime, and work/runtime plots
 
 ## 12. Expected Contribution
 
-A controlled comparison of Neo4j and PostgreSQL on matched DRKG conjunctive-query workloads, with results explained through query structure and execution behavior rather than raw timing alone.
+A controlled comparison of Neo4j and PostgreSQL on the executed DRKG path and triangle conjunctive-query workloads, with results explained through query structure, AGM bounds, skew, PostgreSQL execution behavior, and PostgreSQL join-order sensitivity. Neo4j timing results are included, while Neo4j plan-work metrics are treated as unavailable for this run because the saved `PROFILE` passes failed runtime verification.
