@@ -26,6 +26,18 @@ The pipeline treats `data/drkg.tsv` as the authoritative directed edge list. Met
 - deduplicates exact `(source, relation, destination)` triples
 - keeps self-loops in storage, while benchmark templates require distinct node variables
 
+Data representation:
+
+| Layer | Structure |
+| --- | --- |
+| Raw DRKG edge | `(src_id, rel_type, dst_id)` directed triple |
+| Derived node | `(node_id, node_type)`, where `node_type` is the prefix before `::` |
+| PostgreSQL / DuckDB nodes | `nodes(node_id, node_type)` |
+| PostgreSQL / DuckDB edges | `edges(src_id, dst_id, rel_type)` |
+| Neo4j nodes | `(:Entity {node_id, node_type})` |
+| Neo4j edges | directed relationships, with each raw relation mapped to a legal relationship-type token |
+| Logical relation for queries | `R_t(src_id, dst_id) = edges filtered by rel_type = t` |
+
 The saved full run contains `5,874,229` unique directed edges, `97,237` nodes, and `107` relation types after cleaning.
 
 ## Run Commands
