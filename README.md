@@ -19,7 +19,7 @@ The benchmark uses the [Drug Repurposing Knowledge Graph (DRKG)](https://github.
   <img src="results/02_prepare/figures/Interactions_in_the_DRKG.png" alt="Interactions in the DRKG" width="560">
 </p>
 
-DRKG is stored as `(h, r, t)` triplets: `h` is the head/source entity, `r` is the relation type, and `t` is the tail/target entity. For example, a drug-repurposing edge has the form `(Compound, relation_type, Disease)`, such as `(Compound:Remdesivir, treats, Disease:COVID-19)` conceptually.
+DRKG is stored as `(h, r, t)` triplets: `h` is the head/source entity, `r` is the relation type, and `t` is the tail/target entity.
 
 | Head (source entity) | Relation (interaction type) | Tail (target entity) | Conceptual meaning |
 | --- | --- | --- | --- |
