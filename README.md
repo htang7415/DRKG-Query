@@ -86,19 +86,13 @@ Verify an existing full run:
 bash scripts/_run_cli.sh verify-results --config config.yaml
 ```
 
-## Experiments
+## Experiments and Results
 
-The full benchmark has three experiment groups:
+### 1. Fixed-query engine comparison
 
-| Experiment | Scope | Purpose |
-| --- | --- | --- |
-| Fixed-query engine comparison | PostgreSQL, Neo4j, and DuckDB on `P2`, `P3`, `T1`, `T2`, and `C4` under hub and uniform anchors | Compare row-store SQL, graph traversal, and columnar SQL on matched conjunctive queries. |
-| PostgreSQL join-order study | Default, connected-prefix, and cross-product-inducing left-deep orders for `P3`, `T1`, and `T2` | Measure how much join order and intermediate expansion affect runtime. |
-| Bounded reachability | Depth-2 and depth-3 directional expansion from hub and uniform anchors on all three engines | Compare recursive/path-expansion behavior beyond fixed typed joins. |
+**Experiment.** Run PostgreSQL, Neo4j, and DuckDB on five fixed conjunctive-query templates (`P2`, `P3`, `T1`, `T2`, `C4`) under hub-anchored and uniform-random bindings. The fixed-query benchmark has `600` matched instances across five templates, two sampling regimes, and three engines.
 
-## Key Results
-
-The fixed-query benchmark has `600` matched instances across five templates, two sampling regimes, and three engines.
+**Summary.** DuckDB is fastest on most fixed-query slices. PostgreSQL beats Neo4j on most slices, while Neo4j has a few lower medians such as `C4 / hub`.
 
 | Result slice | PostgreSQL median | Neo4j median | DuckDB median | Takeaway |
 | --- | ---: | ---: | ---: | --- |
@@ -111,21 +105,33 @@ The fixed-query benchmark has `600` matched instances across five templates, two
   <img src="results/05_final/final_figures/2_engine_runtime.png" alt="Engine runtime comparison" width="720">
 </p>
 
-DuckDB is fastest on most fixed-query slices, PostgreSQL beats Neo4j on most slices, and Neo4j has a few lower medians such as `C4 / hub`.
+### 2. Structure and theory comparison
+
+**Experiment.** Compare acyclic path templates against cyclic triangle and 4-cycle templates, using runtime, output size, intermediate work, and AGM-style bounds.
+
+**Summary.** The acyclic `P3` path is much harder than the triangle and 4-cycle workloads. Runtime follows skew, output size, and intermediate expansion more than the acyclic-versus-cyclic label.
 
 <p align="center">
   <img src="results/05_final/final_figures/3_structure_runtime.png" alt="Acyclic versus cyclic runtime" width="720">
 </p>
 
-The acyclic `P3` path is much harder than the triangle and 4-cycle workloads. Runtime follows skew, output size, and intermediate expansion more than the acyclic-versus-cyclic label.
+### 3. PostgreSQL join-order study
+
+**Experiment.** Run PostgreSQL with default plans and forced left-deep join orders for `P3`, `T1`, and `T2`, separating connected-prefix orders from cross-product-inducing orders.
+
+**Summary.** PostgreSQL join order matters. For `P3`, cross-product-inducing forced orders time out on every attempted binding, while connected/default orders often complete.
 
 <p align="center">
   <img src="results/05_final/final_figures/5_join_order_effect.png" alt="PostgreSQL join-order effect" width="680">
 </p>
 
-PostgreSQL join order matters. For `P3`, cross-product-inducing forced orders time out on every attempted binding, while connected/default orders often complete.
+### 4. Bounded reachability
 
-| Reachability slice | Reachable median | PostgreSQL | Neo4j | DuckDB | Takeaway |
+**Experiment.** Run depth-2 and depth-3 directional reachability from hub and uniform anchors on all three engines.
+
+**Summary.** Reachability is anchor-dominated. Hub anchors expand to tens of thousands of reachable nodes, while uniform anchors usually remain tiny.
+
+| Slice | Reachable median | PostgreSQL | Neo4j | DuckDB | Takeaway |
 | --- | ---: | ---: | ---: | ---: | --- |
 | Hub, depth 2 | `45,992` | `726.589 ms` | `337.748 ms` | `280.192 ms` | Hub anchors expand broadly. |
 | Hub, depth 3 | `64,843` | `1,860.033 ms` | `595.506 ms` | `814.463 ms` | Deeper hub expansion dominates runtime. |
