@@ -1,6 +1,6 @@
 # DRKG Query Benchmark
 
-This project compares PostgreSQL, Neo4j, and DuckDB on DRKG query workloads. It studies fixed conjunctive queries over paths, triangles, and a 4-cycle, plus bounded directional reachability. The analysis uses database systems behavior and CS 784 ideas: skew, join order, acyclic versus cyclic structure, and AGM-style output bounds.
+This project compares PostgreSQL, Neo4j, and DuckDB on DRKG query workloads. It studies fixed conjunctive queries over paths, triangles, and a 4-cycle, plus bounded directional reachability. The analysis focuses on database systems behavior: skew, join order, acyclic versus cyclic structure, and AGM-style output bounds.
 
 ## Outline
 
