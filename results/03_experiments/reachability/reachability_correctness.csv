@@ -1,0 +1,13 @@
+reg,bid,anchor_id,depth,pg_out,duck_out,neo_out,pg_duck_match,pg_neo_match
+uniform,1,Compound::MESH:C009591,2,1,1,1,true,true
+uniform,1,Compound::MESH:C009591,3,1,1,1,true,true
+uniform,2,Compound::MESH:C049777,2,3,3,3,true,true
+uniform,2,Compound::MESH:C049777,3,3,3,3,true,true
+uniform,3,Compound::MESH:C050383,2,2,2,2,true,true
+uniform,3,Compound::MESH:C050383,3,2,2,2,true,true
+hub,1,Anatomy::UBERON:0000473,2,45992,45992,45992,true,true
+hub,1,Anatomy::UBERON:0000473,3,64842,64842,64842,true,true
+hub,2,Anatomy::UBERON:0000955,2,46758,46758,46758,true,true
+hub,2,Anatomy::UBERON:0000955,3,65099,65099,65099,true,true
+hub,3,Anatomy::UBERON:0002369,2,46084,46084,46084,true,true
+hub,3,Anatomy::UBERON:0002369,3,64892,64892,64892,true,true

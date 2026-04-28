@@ -1,0 +1,15 @@
+{
+  "anchors_per_regime": 5,
+  "depths": [
+    2,
+    3
+  ],
+  "note": "Small directional bounded-reachability sample; per-anchor rows are the primary evidence.",
+  "rows": 60,
+  "status_counts": {
+    "duck:ok": 20,
+    "neo:ok": 20,
+    "pg:ok": 20
+  },
+  "timeout_sec": 30
+}

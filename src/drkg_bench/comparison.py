@@ -13,34 +13,52 @@ from .plotting import NATURE_PALETTE, apply_plot_style, remove_existing_figures,
 from .reporting import fmt_int, fmt_num
 
 
+def _font_size() -> int:
+    return int(plt.rcParams["font.size"])
+
+
 def run_engine_comparison(ctx: AppContext) -> None:
-    print_status("Comparison: reading PostgreSQL and Neo4j baseline tables")
+    print_status("Comparison: reading PostgreSQL, DuckDB, and Neo4j baseline tables")
     pg_rows = read_csv_rows(ctx.path(ctx.config["paths"]["postgres_baseline_dir"]) / "postgres_baseline.csv")
     neo_rows = read_csv_rows(ctx.path(ctx.config["paths"]["neo4j_baseline_dir"]) / "neo4j_baseline.csv")
+    duck_path = ctx.path(ctx.config["paths"].get("duckdb_baseline_dir", "")) / "duckdb_baseline.csv"
+    duck_rows = read_csv_rows(duck_path) if duck_path.exists() else []
     neo_index = {
         (row["tid"], row["reg"], row["bid"]): row
         for row in neo_rows
+    }
+    duck_index = {
+        (row["tid"], row["reg"], row["bid"]): row
+        for row in duck_rows
     }
 
     matched_rows = []
     for pg in pg_rows:
         key = (pg["tid"], pg["reg"], pg["bid"])
         neo = neo_index.get(key)
+        duck = duck_index.get(key)
         if neo is None:
             continue
         pg_ms = _safe_float(pg.get("med_ms", ""))
         neo_ms = _safe_float(neo.get("med_ms", ""))
+        duck_ms = _safe_float(duck.get("med_ms", "")) if duck else None
+        duck_out = duck.get("out", "") if duck else ""
         matched_rows.append(
             {
                 "tid": pg["tid"],
                 "reg": pg["reg"],
                 "bid": pg["bid"],
                 "pg_ms": pg_ms,
+                "duck_ms": duck_ms,
                 "neo_ms": neo_ms,
                 "pg_out": pg.get("out", ""),
+                "duck_out": duck_out,
                 "neo_out": neo.get("out", ""),
                 "out_match": bool(pg.get("out")) and pg.get("out") == neo.get("out"),
+                "duck_out_match": bool(pg.get("out")) and bool(duck_out) and pg.get("out") == duck_out,
                 "spd": (pg_ms / neo_ms) if pg_ms and neo_ms and neo_ms > 0 else None,
+                "pg_duck": (pg_ms / duck_ms) if pg_ms and duck_ms and duck_ms > 0 else None,
+                "neo_duck": (neo_ms / duck_ms) if neo_ms and duck_ms and duck_ms > 0 else None,
             }
         )
 
@@ -59,20 +77,33 @@ def run_engine_comparison(ctx: AppContext) -> None:
             "neo_q1",
             "neo_ms",
             "neo_q3",
+            "duck_q1",
+            "duck_ms",
+            "duck_q3",
             "spd_q1",
             "spd",
             "spd_q3",
+            "pg_duck_q1",
+            "pg_duck",
+            "pg_duck_q3",
+            "neo_duck_q1",
+            "neo_duck",
+            "neo_duck_q3",
         ],
         summary_rows,
     )
 
     speedups = [row["spd"] for row in matched_rows if row["spd"] is not None]
+    duck_speedups = [row["pg_duck"] for row in matched_rows if row["pg_duck"] is not None]
     ctx.write_json(
         comparison_dir / "comparison_metrics.json",
         {
             "matched_instances": len(matched_rows),
             "matching_output_cardinality_instances": sum(1 for row in matched_rows if row["out_match"]),
+            "duckdb_instances": len(duck_rows),
+            "duckdb_matching_output_cardinality_instances": sum(1 for row in matched_rows if row["duck_out_match"]),
             "mean_neo_over_pg_speedup": statistics.mean(speedups) if speedups else None,
+            "mean_pg_over_duckdb_speedup": statistics.mean(duck_speedups) if duck_speedups else None,
         },
     )
     print_status(f"Comparison: matched {len(matched_rows)} baseline instances; writing figures")
@@ -88,7 +119,10 @@ def _summarize_matches(rows: list[dict[str, object]]) -> list[dict[str, str]]:
     for (tid, reg), group_rows in sorted(grouped.items()):
         pg_values = [float(row["pg_ms"]) for row in group_rows if row["pg_ms"] is not None]
         neo_values = [float(row["neo_ms"]) for row in group_rows if row["neo_ms"] is not None]
+        duck_values = [float(row["duck_ms"]) for row in group_rows if row["duck_ms"] is not None]
         spd_values = [float(row["spd"]) for row in group_rows if row["spd"] is not None]
+        pg_duck_values = [float(row["pg_duck"]) for row in group_rows if row["pg_duck"] is not None]
+        neo_duck_values = [float(row["neo_duck"]) for row in group_rows if row["neo_duck"] is not None]
         summary_rows.append(
             {
                 "tid": tid,
@@ -101,9 +135,18 @@ def _summarize_matches(rows: list[dict[str, object]]) -> list[dict[str, str]]:
                 "neo_q1": fmt_num(_percentile(neo_values, 25)),
                 "neo_ms": fmt_num(_percentile(neo_values, 50)),
                 "neo_q3": fmt_num(_percentile(neo_values, 75)),
+                "duck_q1": fmt_num(_percentile(duck_values, 25)),
+                "duck_ms": fmt_num(_percentile(duck_values, 50)),
+                "duck_q3": fmt_num(_percentile(duck_values, 75)),
                 "spd_q1": fmt_num(_percentile(spd_values, 25)),
                 "spd": fmt_num(_percentile(spd_values, 50)),
                 "spd_q3": fmt_num(_percentile(spd_values, 75)),
+                "pg_duck_q1": fmt_num(_percentile(pg_duck_values, 25)),
+                "pg_duck": fmt_num(_percentile(pg_duck_values, 50)),
+                "pg_duck_q3": fmt_num(_percentile(pg_duck_values, 75)),
+                "neo_duck_q1": fmt_num(_percentile(neo_duck_values, 25)),
+                "neo_duck": fmt_num(_percentile(neo_duck_values, 50)),
+                "neo_duck_q3": fmt_num(_percentile(neo_duck_values, 75)),
             }
         )
     return summary_rows
@@ -136,23 +179,64 @@ def _engine_runtime_figure(path: Path, rows: list[dict[str, str]], *, dpi: int) 
         return
     regimes = [reg for reg in ["uniform", "hub"] if any(row["reg"] == reg for row in rows)]
     tids = sorted({row["tid"] for row in rows})
-    fig, axes = plt.subplots(1, len(regimes), figsize=(max(12, len(tids) * 1.5), 5.6), squeeze=False)
+    fig, axes = plt.subplots(1, len(regimes), figsize=(max(12, len(tids) * 1.5), 5.8), squeeze=False)
+
+    def _ratio_label(engine_value: float, pg_value: float) -> str:
+        if not np.isfinite(engine_value) or not np.isfinite(pg_value) or pg_value <= 0:
+            return ""
+        return f"{engine_value / pg_value:.2f}×"
 
     for axis, reg in zip(axes[0], regimes, strict=True):
         reg_rows = {row["tid"]: row for row in rows if row["reg"] == reg}
         x_values = np.arange(len(tids))
-        width = 0.34
+        has_duck = any(tid in reg_rows and reg_rows[tid].get("duck_ms") for tid in tids)
+        width = 0.26 if has_duck else 0.34
         pg_values = [float(reg_rows[tid]["pg_ms"]) if tid in reg_rows and reg_rows[tid]["pg_ms"] else np.nan for tid in tids]
         neo_values = [float(reg_rows[tid]["neo_ms"]) if tid in reg_rows and reg_rows[tid]["neo_ms"] else np.nan for tid in tids]
-        axis.bar(x_values - width / 2, pg_values, width=width, color=NATURE_PALETTE["postgres"], label="pg")
-        axis.bar(x_values + width / 2, neo_values, width=width, color=NATURE_PALETTE["neo4j"], label="neo")
+        duck_values = [float(reg_rows[tid]["duck_ms"]) if tid in reg_rows and reg_rows[tid].get("duck_ms") else np.nan for tid in tids]
+        if has_duck:
+            axis.bar(x_values - width, pg_values, width=width, color=NATURE_PALETTE["postgres"], label="pg")
+            axis.bar(x_values, duck_values, width=width, color=NATURE_PALETTE["duckdb"], label="duck")
+            axis.bar(x_values + width, neo_values, width=width, color=NATURE_PALETTE["neo4j"], label="neo")
+            for offset, values, ref in (
+                (0.0, duck_values, pg_values),
+                (width, neo_values, pg_values),
+            ):
+                for x_pos, value, base in zip(x_values, values, ref, strict=True):
+                    label = _ratio_label(value, base)
+                    if label and np.isfinite(value) and value > 0:
+                        axis.text(
+                            x_pos + offset,
+                            value,
+                            label,
+                            ha="center",
+                            va="bottom",
+                            fontsize=_font_size(),
+                            rotation=0,
+                        )
+        else:
+            axis.bar(x_values - width / 2, pg_values, width=width, color=NATURE_PALETTE["postgres"], label="pg")
+            axis.bar(x_values + width / 2, neo_values, width=width, color=NATURE_PALETTE["neo4j"], label="neo")
+            for x_pos, value, base in zip(x_values, neo_values, pg_values, strict=True):
+                label = _ratio_label(value, base)
+                if label and np.isfinite(value) and value > 0:
+                    axis.text(
+                        x_pos + width / 2,
+                        value,
+                        label,
+                        ha="center",
+                        va="bottom",
+                        fontsize=_font_size(),
+                    )
         axis.set_yscale("log")
-        axis.set_ylabel("Median ms")
+        axis.set_ylabel("Runtime (ms, log scale)")
         axis.set_xticks(x_values)
         axis.set_xticklabels(tids)
-        axis.text(0.02, 0.96, reg, transform=axis.transAxes, va="top", ha="left", fontsize=14)
+        axis.text(0.02, 0.96, reg, transform=axis.transAxes, va="top", ha="left", fontsize=_font_size())
         style_axes(axis)
         axis.legend()
+        bottom, top = axis.get_ylim()
+        axis.set_ylim(bottom, top * 2.2)
 
     fig.tight_layout()
     fig.savefig(path, dpi=dpi)
@@ -185,7 +269,7 @@ def _speedup_figure(path: Path, rows: list[dict[str, str]], *, dpi: int) -> None
         axis.set_ylabel("pg / neo")
         axis.set_xticks(np.arange(len(tids)))
         axis.set_xticklabels(tids)
-        axis.text(0.02, 0.96, reg, transform=axis.transAxes, va="top", ha="left", fontsize=14)
+        axis.text(0.02, 0.96, reg, transform=axis.transAxes, va="top", ha="left", fontsize=_font_size())
         style_axes(axis)
 
     fig.tight_layout()

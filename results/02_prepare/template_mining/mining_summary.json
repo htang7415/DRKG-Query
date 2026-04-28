@@ -52,15 +52,26 @@
       "mode": "skipped",
       "selected_count": 0,
       "stop_reason": "disabled_by_config"
+    },
+    {
+      "candidate_count": 1,
+      "edge_count": 4,
+      "elapsed_sec": 0.037,
+      "exact_evaluations": 1,
+      "family": "cycle",
+      "mode": "manual_exact_local_c4",
+      "selected_count": 1,
+      "stop_reason": "manual_selected_manageable_cycle"
     }
   ],
   "min_grounded_matches": 100,
   "min_valid_anchors": 20,
-  "selected_count": 4,
+  "selected_count": 5,
   "selected_template_ids": [
     "path_2_DRUGBANK::ddi-interactor-in::Compound:Compound__DRUGBANK::ddi-interactor-in::Compound:Compound",
     "path_3_DRUGBANK::ddi-interactor-in::Compound:Compound__DRUGBANK::ddi-interactor-in::Compound:Compound__DRUGBANK::ddi-interactor-in::Compound:Compound",
     "triangle_STRING::REACTION::Gene:Gene__STRING::REACTION::Gene:Gene__STRING::REACTION::Gene:Gene",
-    "triangle_STRING::REACTION::Gene:Gene__STRING::CATALYSIS::Gene:Gene__STRING::REACTION::Gene:Gene"
+    "triangle_STRING::REACTION::Gene:Gene__STRING::CATALYSIS::Gene:Gene__STRING::REACTION::Gene:Gene",
+    "cycle_4_GNBR::V+::Gene:Gene__GNBR::V+::Gene:Gene__GNBR::V+::Gene:Gene__GNBR::V+::Gene:Gene"
   ]
 }

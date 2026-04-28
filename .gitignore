@@ -1,5 +1,6 @@
 # Benchmark outputs
 *.tsv
+*.duckdb
 
 # Python caches
 __pycache__/

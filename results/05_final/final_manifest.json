@@ -1,31 +1,19 @@
 {
+  "final_docs": [
+    "results_and_conclusion.md"
+  ],
   "final_figures": [
-    "agm_runtime.png",
-    "dataset_profile.png",
-    "engine_runtime.png",
-    "join_order_effect.png",
-    "speedup.png",
-    "structure_runtime.png",
-    "template_profile.png",
-    "work_runtime.png"
+    "1_template_profile.png",
+    "2_engine_runtime.png",
+    "3_structure_runtime.png",
+    "4_agm_runtime.png",
+    "5_join_order_effect.png",
+    "6_reachability_runtime.png"
   ],
   "final_tables": [
-    "candidate_summary.csv",
-    "comparison_metrics.json",
-    "dataset_analysis.json",
-    "dataset_overview.csv",
-    "engine_summary.csv",
-    "instance_summary.csv",
-    "join_order_summary.csv",
-    "mining_summary.json",
-    "preprocess_summary.json",
-    "selected_templates.csv",
-    "selected_templates.yaml",
-    "structure_summary.csv",
-    "summary_metrics.json",
-    "template_summary.csv",
-    "theory_summary.json",
-    "top_node_types.csv",
-    "top_relations.csv"
+    "1_selected_templates.csv",
+    "2_engine_summary.csv",
+    "3_join_order_summary.csv",
+    "4_reachability_runtime.csv"
   ]
 }

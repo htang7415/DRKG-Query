@@ -23,6 +23,12 @@ def _run_load_postgres(ctx):
     load_postgres(ctx)
 
 
+def _run_load_duckdb(ctx):
+    from .duckdb_db import load_duckdb
+
+    load_duckdb(ctx)
+
+
 def _run_load_neo4j(ctx):
     from .neo4j_db import load_neo4j
 
@@ -53,6 +59,12 @@ def _run_postgres_baseline(ctx):
     run_postgres_baseline(ctx)
 
 
+def _run_duckdb_baseline(ctx):
+    from .benchmarking import run_duckdb_baseline
+
+    run_duckdb_baseline(ctx)
+
+
 def _run_neo4j_baseline(ctx):
     from .benchmarking import run_neo4j_baseline
 
@@ -69,6 +81,12 @@ def _run_join_order(ctx):
     from .benchmarking import run_join_order
 
     run_join_order(ctx)
+
+
+def _run_reachability(ctx):
+    from .reachability import run_reachability
+
+    run_reachability(ctx)
 
 
 def _run_compute_theory(ctx):
@@ -118,14 +136,17 @@ def main() -> None:
         "check-env": _run_check_env,
         "preprocess": _run_preprocess,
         "load-postgres": _run_load_postgres,
+        "load-duckdb": _run_load_duckdb,
         "load-neo4j": _run_load_neo4j,
         "mine-templates": _run_mine_templates,
         "mine-milestone-templates": _run_mine_milestone_templates,
         "sample-bindings": _run_sample_bindings,
         "run-postgres-baseline": _run_postgres_baseline,
+        "run-duckdb-baseline": _run_duckdb_baseline,
         "run-neo4j-baseline": _run_neo4j_baseline,
         "compare-engines": _run_compare_engines,
         "run-join-order": _run_join_order,
+        "run-reachability": _run_reachability,
         "compute-theory": _run_compute_theory,
         "postprocess": _run_postprocess,
         "make-figures": _run_make_figures,

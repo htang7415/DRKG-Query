@@ -40,15 +40,20 @@ def verify_results(ctx: AppContext) -> None:
         ctx.path(ctx.config["paths"]["preprocess_dir"]) / "top_node_types.csv",
         ctx.path(ctx.config["paths"]["preprocess_dir"]) / "top_relations.csv",
         ctx.path(ctx.config["paths"]["load_postgres_dir"]) / "load_summary.json",
+        ctx.path(ctx.config["paths"].get("load_duckdb_dir", "")) / "load_summary.json",
         ctx.path(ctx.config["paths"]["load_neo4j_dir"]) / "load_summary.json",
         ctx.path(ctx.config["paths"]["template_mining_dir"]) / "selected_templates.yaml",
         ctx.path(ctx.config["paths"]["template_mining_dir"]) / "selected_templates.csv",
         ctx.path(ctx.config["paths"]["template_mining_dir"]) / "candidate_summary.csv",
         ctx.path(ctx.config["paths"]["template_mining_dir"]) / "mining_summary.json",
         ctx.path(ctx.config["paths"]["postgres_baseline_dir"]) / "postgres_baseline.csv",
+        ctx.path(ctx.config["paths"].get("duckdb_baseline_dir", "")) / "duckdb_baseline.csv",
         ctx.path(ctx.config["paths"]["neo4j_baseline_dir"]) / "neo4j_baseline.csv",
         ctx.path(ctx.config["paths"]["comparison_dir"]) / "engine_summary.csv",
         ctx.path(ctx.config["paths"]["comparison_dir"]) / "comparison_metrics.json",
+        ctx.path(ctx.config["paths"].get("reachability_dir", "")) / "reachability_runtime.csv",
+        ctx.path(ctx.config["paths"].get("reachability_dir", "")) / "reachability_correctness.csv",
+        ctx.path(ctx.config["paths"].get("reachability_dir", "")) / "reachability_summary.json",
         ctx.path(ctx.config["paths"]["join_order_dir"]) / "postgres_join_order.csv",
         ctx.path(ctx.config["paths"]["theory_dir"]) / "agm_bounds.csv",
         ctx.path(ctx.config["paths"]["theory_dir"]) / "theory_summary.json",
@@ -72,6 +77,8 @@ def verify_results(ctx: AppContext) -> None:
     label_map = template_label_map(selected_templates)
     templates_by_tid = {label_map[template.template_id]: template for template in selected_templates}
     postgres_rows = read_csv_rows(ctx.path(ctx.config["paths"]["postgres_baseline_dir"]) / "postgres_baseline.csv")
+    duckdb_path = ctx.path(ctx.config["paths"].get("duckdb_baseline_dir", "")) / "duckdb_baseline.csv"
+    duckdb_rows = read_csv_rows(duckdb_path) if duckdb_path.exists() else []
     neo4j_rows = read_csv_rows(ctx.path(ctx.config["paths"]["neo4j_baseline_dir"]) / "neo4j_baseline.csv")
     join_rows = read_csv_rows(ctx.path(ctx.config["paths"]["join_order_dir"]) / "postgres_join_order.csv")
 
@@ -79,8 +86,13 @@ def verify_results(ctx: AppContext) -> None:
     neo_keys = {(row["tid"], row["reg"], row["bid"]) for row in neo4j_rows}
     if pg_keys != neo_keys:
         raise BenchmarkError("PostgreSQL and Neo4j baseline instance keys do not match")
+    duck_keys = {(row["tid"], row["reg"], row["bid"]) for row in duckdb_rows}
+    if duckdb_rows and pg_keys != duck_keys:
+        raise BenchmarkError("PostgreSQL and DuckDB baseline instance keys do not match")
     if len(pg_keys) != len(postgres_rows) or len(neo_keys) != len(neo4j_rows):
         raise BenchmarkError("Duplicate baseline instance keys detected")
+    if duckdb_rows and len(duck_keys) != len(duckdb_rows):
+        raise BenchmarkError("Duplicate DuckDB baseline instance keys detected")
 
     join_instance_keys = {(row["tid"], row["reg"], row["bid"], row["ord_idx"]) for row in join_rows}
     if len(join_instance_keys) != len(join_rows):

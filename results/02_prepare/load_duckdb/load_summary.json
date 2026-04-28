@@ -1,0 +1,10 @@
+{
+  "anchor_degree_count": 284923,
+  "database_path": "results/02_prepare/load_duckdb/drkg.duckdb",
+  "edge_count": 5874229,
+  "memory_limit": "8GB",
+  "node_count": 97237,
+  "node_id_type": "VARCHAR",
+  "threads": 4,
+  "typed_edge_count": 5874229
+}

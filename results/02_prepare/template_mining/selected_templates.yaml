@@ -162,3 +162,54 @@ templates:
   anchor_degree_median: 59.0
   anchor_degree_p95: 257.0
   anchor_degree_max: 1000.0
+- template_id: cycle_4_GNBR::V+::Gene:Gene__GNBR::V+::Gene:Gene__GNBR::V+::Gene:Gene__GNBR::V+::Gene:Gene
+  family: cycle
+  edge_count: 4
+  node_vars:
+  - v1
+  - v2
+  - v3
+  - v4
+  anchor_var: v1
+  node_type_pattern:
+  - Gene
+  - Gene
+  - Gene
+  - Gene
+  endpoint_type_pattern:
+  - Gene:Gene
+  - Gene:Gene
+  - Gene:Gene
+  - Gene:Gene
+  relation_type_pattern:
+  - GNBR::V+::Gene:Gene
+  - GNBR::V+::Gene:Gene
+  - GNBR::V+::Gene:Gene
+  - GNBR::V+::Gene:Gene
+  edges:
+  - alias: e1
+    src_var: v1
+    dst_var: v2
+    rel_type: GNBR::V+::Gene:Gene
+    neo4j_rel_type: REL_GNBR_V_GENE_GENE__2E4956B7
+  - alias: e2
+    src_var: v2
+    dst_var: v3
+    rel_type: GNBR::V+::Gene:Gene
+    neo4j_rel_type: REL_GNBR_V_GENE_GENE__2E4956B7
+  - alias: e3
+    src_var: v3
+    dst_var: v4
+    rel_type: GNBR::V+::Gene:Gene
+    neo4j_rel_type: REL_GNBR_V_GENE_GENE__2E4956B7
+  - alias: e4
+    src_var: v4
+    dst_var: v1
+    rel_type: GNBR::V+::Gene:Gene
+    neo4j_rel_type: REL_GNBR_V_GENE_GENE__2E4956B7
+  grounded_match_count: 113628
+  valid_anchor_count: 568
+  anchor_degree_min: 1.0
+  anchor_degree_median: 5.0
+  anchor_degree_p95: 20.649999999999977
+  anchor_degree_max: 92.0

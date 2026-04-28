@@ -24,6 +24,14 @@ bash scripts/04_phase_analysis.sh --config config.yaml
 bash scripts/05_phase_finalize.sh --config config.yaml
 ```
 
+Phase contents:
+
+- `01_phase_setup.sh`: environment checks and dependency snapshot
+- `02_phase_prepare.sh`: preprocess DRKG, load PostgreSQL, mine templates, sample bindings, load DuckDB, and load Neo4j
+- `03_phase_experiments.sh`: run PostgreSQL, DuckDB, and Neo4j baselines; compare engines; run PostgreSQL join-order; run reachability
+- `04_phase_analysis.sh`: compute theory artifacts, summarize results, and render figures
+- `05_phase_finalize.sh`: build `results/05_final/` and verify outputs
+
 Outputs land in:
 
 - `results/01_setup/`
@@ -35,7 +43,8 @@ Outputs land in:
 Notes:
 
 - If `services.mode: docker` and `services.auto_start: true`, DB-backed phases auto-start local PostgreSQL and Neo4j containers.
-- For the final benchmark, only preprocessing uses tmpfs. The PostgreSQL and Neo4j containers must stay on persistent storage because phase 3 restarts the DBMS for every query instance.
+- DuckDB runs in-process against `results/02_prepare/load_duckdb/drkg.duckdb`; it does not need a Docker service.
+- For the final benchmark, only preprocessing uses tmpfs. The PostgreSQL and Neo4j containers must stay on persistent storage because phase 3 restarts those DBMSs for benchmark instances.
 - If the Docker containers already exist from an older tmpfs-backed config, recreate them once before the final full run:
 
 ```bash
@@ -43,4 +52,4 @@ docker rm -f drkg-bench-postgres drkg-bench-neo4j
 bash scripts/dev_start_services_docker.sh --config config.yaml
 ```
 
-- All figures are PNG, `dpi=600`, `font_size=16`, and have no titles.
+- Final figures are PNG at `dpi=600`. The shared plotting font size is `16`; figure 5 uses a larger local font for readability.

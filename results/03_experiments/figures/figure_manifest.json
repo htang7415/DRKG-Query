@@ -3,6 +3,7 @@
   "files": [
     "engine_runtime.png",
     "join_order_effect.png",
+    "reachability_runtime.png",
     "speedup.png"
   ],
   "font_size": 16

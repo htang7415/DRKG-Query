@@ -43,13 +43,13 @@ export MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp/drkg_bench_mplconfig}"
 mkdir -p "$MPLCONFIGDIR"
 
 case "$COMMAND" in
-  load-postgres|load-neo4j|run-postgres-baseline|run-neo4j-baseline|run-join-order|compute-theory)
+  load-postgres|load-neo4j|run-postgres-baseline|run-neo4j-baseline|run-join-order|run-reachability|compute-theory)
     bash "$ROOT/scripts/_maybe_start_services.sh" --config "$CONFIG_PATH"
     ;;
 esac
 
 case "$COMMAND" in
-  load-postgres|run-postgres-baseline|run-join-order|compute-theory)
+  load-postgres|run-postgres-baseline|run-join-order|run-reachability|compute-theory)
     python - <<'PY' "$CONFIG_PATH"
 from drkg_bench.common import load_context
 from drkg_bench.postgres import wait_for_postgres
@@ -58,7 +58,7 @@ ctx = load_context(__import__("sys").argv[1])
 wait_for_postgres(ctx)
 PY
     ;;
-  load-neo4j|run-neo4j-baseline)
+  load-neo4j|run-neo4j-baseline|run-reachability)
     python - <<'PY' "$CONFIG_PATH"
 from drkg_bench.common import load_context
 from drkg_bench.neo4j_db import wait_for_neo4j

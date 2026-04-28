@@ -9,6 +9,7 @@ from .common import AppContext
 
 NATURE_PALETTE = {
     "postgres": "#2F6C8F",
+    "duckdb": "#8A6BBE",
     "neo4j": "#D65D31",
     "uniform_random": "#2D9D78",
     "hub_anchored": "#274C77",
@@ -42,11 +43,14 @@ REGIME_MARKERS = {
 
 
 def apply_plot_style(ctx: AppContext) -> None:
+    font_size = int(ctx.config["plotting"]["font_size"])
     plt.rcParams.update(
         {
-            "font.size": int(ctx.config["plotting"]["font_size"]),
+            "font.size": font_size,
             "font.family": "sans-serif",
             "font.sans-serif": ["DejaVu Sans", "Arial", "Helvetica"],
+            "axes.titlesize": font_size,
+            "axes.labelsize": font_size,
             "axes.labelcolor": NATURE_PALETTE["text"],
             "axes.edgecolor": NATURE_PALETTE["frame"],
             "axes.linewidth": 1.2,
@@ -59,8 +63,12 @@ def apply_plot_style(ctx: AppContext) -> None:
             "ytick.color": NATURE_PALETTE["text"],
             "xtick.direction": "out",
             "ytick.direction": "out",
+            "xtick.labelsize": font_size,
+            "ytick.labelsize": font_size,
             "xtick.major.size": 4.5,
             "ytick.major.size": 4.5,
+            "legend.fontsize": font_size,
+            "legend.title_fontsize": font_size,
             "legend.frameon": False,
             "figure.dpi": ctx.config["plotting"]["dpi"],
             "savefig.dpi": ctx.config["plotting"]["dpi"],

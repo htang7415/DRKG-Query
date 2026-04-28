@@ -1,5 +1,8 @@
 {
-  "matched_instances": 160,
-  "matching_output_cardinality_instances": 140,
-  "mean_neo_over_pg_speedup": 0.36451298172491853
+  "duckdb_instances": 200,
+  "duckdb_matching_output_cardinality_instances": 184,
+  "matched_instances": 200,
+  "matching_output_cardinality_instances": 180,
+  "mean_neo_over_pg_speedup": 0.6032276349082814,
+  "mean_pg_over_duckdb_speedup": 3.7286002920958974
 }

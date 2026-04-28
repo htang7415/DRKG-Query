@@ -741,6 +741,8 @@ def _local_anchor_counts(graph: GraphIndex, template: Template) -> Counter[int] 
         return _path3_anchor_counts(graph, rel_seq)
     if template.family == "triangle" and template.edge_count == 3:
         return _triangle_anchor_counts(graph, rel_seq)
+    if template.family == "cycle" and template.edge_count == 4:
+        return _cycle4_anchor_counts(graph, rel_seq)
     return None
 
 
@@ -802,6 +804,37 @@ def _triangle_anchor_counts(graph: GraphIndex, rel_seq: tuple[int, int, int]) ->
                 continue
             if anchor in other:
                 anchor_counts[anchor] += 1
+    return anchor_counts
+
+
+def _cycle4_anchor_counts(graph: GraphIndex, rel_seq: tuple[int, int, int, int]) -> Counter[int]:
+    rel1, rel2, rel3, rel4 = rel_seq
+    anchor_counts: Counter[int] = Counter()
+    for middle_left, middle_right in graph.edges_by_rel.get(rel2, []):
+        if middle_left == middle_right:
+            continue
+        anchors = graph.in_adj[middle_left].get(rel1)
+        tails = graph.out_adj[middle_right].get(rel3)
+        if not anchors or not tails:
+            continue
+        for tail in tails:
+            if tail == middle_left or tail == middle_right:
+                continue
+            closing_anchors = graph.out_adj[tail].get(rel4)
+            if not closing_anchors:
+                continue
+            if len(anchors) <= len(closing_anchors):
+                for anchor in anchors:
+                    if anchor == middle_left or anchor == middle_right or anchor == tail:
+                        continue
+                    if anchor in closing_anchors:
+                        anchor_counts[anchor] += 1
+            else:
+                for anchor in closing_anchors:
+                    if anchor == middle_left or anchor == middle_right or anchor == tail:
+                        continue
+                    if anchor in anchors:
+                        anchor_counts[anchor] += 1
     return anchor_counts
 
 

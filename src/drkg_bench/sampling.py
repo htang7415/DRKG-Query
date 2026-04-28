@@ -14,24 +14,29 @@ from .templates import Template, valid_anchors_params, valid_anchors_sql
 def run_sampling(ctx: AppContext) -> None:
     templates = load_selected_templates(ctx)
     graph = _load_graph_index(ctx)
-    conn = connect_postgres(ctx)
+    conn = None
+    baseline_rows = []
+    join_rows = []
+    seed = int(ctx.config["project"]["random_seed"])
+    label_map = template_label_map(templates)
+    print_status(f"Sampling bindings for {len(templates)} selected templates")
     try:
-        baseline_rows = []
-        join_rows = []
-        seed = int(ctx.config["project"]["random_seed"])
-        label_map = template_label_map(templates)
-        print_status(f"Sampling bindings for {len(templates)} selected templates")
         for index, template in enumerate(templates, start=1):
             print_status(f"Sampling template {index}/{len(templates)}: {template.template_id}")
-            anchors = fetch_valid_anchors(ctx, conn, graph, template)
+            anchors = local_anchor_rows(graph, template)
+            if anchors is None:
+                if conn is None:
+                    conn = connect_postgres(ctx)
+                anchors = fetch_valid_anchors(ctx, conn, graph, template)
             baseline_rows.extend(sample_bindings(ctx, template, anchors, "baseline", seed, label_map[template.template_id]))
             join_rows.extend(sample_bindings(ctx, template, anchors, "join_order", seed, label_map[template.template_id]))
-        print_status("Sampling complete; writing binding CSVs")
-        fields = ["tid", "fam", "reg", "grp", "bid", "anchor_id", "support", "deg", "target_n", "cand_n", "shortfall"]
-        ctx.write_csv(Path(ctx.config["paths"]["bindings_dir"]) / "baseline_bindings.csv", fields, baseline_rows)
-        ctx.write_csv(Path(ctx.config["paths"]["bindings_dir"]) / "join_order_bindings.csv", fields, join_rows)
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
+    print_status("Sampling complete; writing binding CSVs")
+    fields = ["tid", "fam", "reg", "grp", "bid", "anchor_id", "support", "deg", "target_n", "cand_n", "shortfall"]
+    ctx.write_csv(Path(ctx.config["paths"]["bindings_dir"]) / "baseline_bindings.csv", fields, baseline_rows)
+    ctx.write_csv(Path(ctx.config["paths"]["bindings_dir"]) / "join_order_bindings.csv", fields, join_rows)
 
 
 def fetch_valid_anchors(ctx: AppContext, conn, graph, template: Template) -> list[dict]:

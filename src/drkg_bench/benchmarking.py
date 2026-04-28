@@ -11,6 +11,7 @@ from neo4j import Query
 
 from .artifacts import load_selected_templates, read_csv_rows
 from .common import AppContext, print_status
+from .duckdb_db import connect_duckdb, duckdb_sql
 from .neo4j_db import connect_neo4j
 from .plotting import NATURE_PALETTE, apply_plot_style, style_axes, write_figure_manifest
 from .postgres import connect_postgres, explain_json, plan_metrics
@@ -109,6 +110,124 @@ def run_join_order(ctx: AppContext) -> None:
         )
         _write_logs(ctx, output_dir / "logs", rows)
         _write_join_order_figure(ctx, rows)
+
+
+def run_duckdb_baseline(ctx: AppContext) -> None:
+    binding_rows = read_csv_rows(ctx.path(ctx.config["paths"]["bindings_dir"]) / "baseline_bindings.csv")
+    print_status(f"DuckDB baseline: benchmarking {len(binding_rows)} query instances")
+    selected_templates = load_selected_templates(ctx)
+    label_map = template_label_map(selected_templates)
+    templates = {label_map[template.template_id]: template for template in selected_templates}
+    rows: list[dict[str, Any]] = []
+    total_bindings = len(binding_rows)
+    progress_every = _progress_interval(total_bindings)
+    last_group: tuple[str, str] | None = None
+
+    for binding_index, binding in enumerate(binding_rows, start=1):
+        template = templates[binding["tid"]]
+        group = (binding["tid"], binding["reg"])
+        if group != last_group:
+            print_status(f"DuckDB baseline: {binding['tid']} / {binding['reg']}")
+            last_group = group
+        if binding_index == 1 or binding_index == total_bindings or binding_index % progress_every == 0:
+            print_status(f"DuckDB baseline: binding {binding_index}/{total_bindings}")
+        rows.append(_benchmark_duckdb_instance(ctx, template, binding))
+
+    if rows:
+        output_dir = Path(ctx.config["paths"]["duckdb_baseline_dir"])
+        print_status("DuckDB baseline: writing benchmark outputs")
+        ctx.write_csv(
+            output_dir / "duckdb_baseline.csv",
+            BASELINE_RESULT_FIELDS,
+            rows,
+        )
+        _write_logs(ctx, output_dir / "logs", rows)
+
+
+def _benchmark_duckdb_instance(ctx: AppContext, template: Template, binding: dict[str, str]) -> dict[str, Any]:
+    conn = connect_duckdb(ctx)
+    sql = duckdb_sql(default_count_sql(template))
+    params = default_count_params(template, binding["anchor_id"])
+    try:
+        return _run_duckdb_query_instance(
+            ctx,
+            conn=conn,
+            sql=sql,
+            params=params,
+            template=template,
+            binding=binding,
+        )
+    finally:
+        conn.close()
+
+
+def _run_duckdb_query_instance(
+    ctx: AppContext,
+    *,
+    conn,
+    sql: str,
+    params: list[Any],
+    template: Template,
+    binding: dict[str, str],
+) -> dict[str, Any]:
+    duck_cfg = ctx.config.get("duckdb", {})
+    warmup_runs = int(duck_cfg.get("warmup_runs", ctx.config["benchmark"]["warmup_runs"]))
+    measured_runs = int(duck_cfg.get("measured_runs", ctx.config["benchmark"]["measured_runs"]))
+
+    result_row = _base_result_row("duckdb", template, binding, 0, "default_plan", {"cache_flush": {}, "restarted": False})
+    timings = []
+    output_cardinality = None
+
+    try:
+        for _ in range(warmup_runs):
+            output_cardinality = _execute_duckdb_count(conn, sql, params)
+    except Exception as exc:
+        result_row.update(
+            {
+                "status": "fail",
+                "fail_stage": "warmup",
+                "fail_type": type(exc).__name__,
+                "med_ms": "",
+                "iqr_ms": "",
+                "out": "",
+                "buf_hit": "",
+                "work": "",
+                "run_ok": "false",
+            }
+        )
+        return result_row
+
+    try:
+        for _ in range(measured_runs):
+            started = time.perf_counter()
+            output_cardinality = _execute_duckdb_count(conn, sql, params)
+            timings.append((time.perf_counter() - started) * 1000.0)
+    except Exception as exc:
+        result_row.update(
+            {
+                "status": "fail",
+                "fail_stage": "measured",
+                "fail_type": type(exc).__name__,
+                "med_ms": "",
+                "iqr_ms": "",
+                "out": "",
+                "buf_hit": "",
+                "work": "",
+                "run_ok": "false",
+            }
+        )
+        return result_row
+
+    result_row["med_ms"] = fmt_num(statistics.median(timings))
+    result_row["iqr_ms"] = fmt_num(float(np.percentile(timings, 75) - np.percentile(timings, 25)))
+    result_row["out"] = fmt_int(output_cardinality)
+    result_row["status"] = "ok"
+    result_row["run_ok"] = "true"
+    return result_row
+
+
+def _execute_duckdb_count(conn, sql: str, params: list[Any]) -> int:
+    return int(conn.execute(sql, params).fetchone()[0])
 
 
 def _run_postgres_instances(
@@ -477,6 +596,7 @@ def _base_result_row(
     instance_info: dict[str, Any],
 ) -> dict[str, Any]:
     cache_flush = instance_info["cache_flush"]
+    flush_success = bool(cache_flush.get("success", False)) if isinstance(cache_flush, dict) else False
     return {
         "eng": engine_label(engine),
         "tid": binding["tid"],
@@ -496,7 +616,7 @@ def _base_result_row(
         "db_hits": "",
         "work": "",
         "run_ok": "",
-        "flush_ok": str(bool(cache_flush["success"])).lower(),
+        "flush_ok": str(flush_success).lower(),
     }
 
 
@@ -535,6 +655,7 @@ def _write_join_order_figure(ctx: AppContext, rows: list[dict[str, Any]]) -> Non
         write_figure_manifest(ctx, figure_dir)
         return
 
+    font_size = int(ctx.config["plotting"]["font_size"]) + 6
     fig, ax = plt.subplots(figsize=(max(12, len(template_ids) * 1.6), 7))
     offsets = {
         "default": -0.18,
@@ -572,11 +693,12 @@ def _write_join_order_figure(ctx: AppContext, rows: list[dict[str, Any]]) -> Non
             label=join_class,
         )
     ax.set_yscale("log")
-    ax.set_ylabel("Median runtime (ms)")
+    ax.set_ylabel("Runtime (ms, log scale)", fontsize=font_size)
     ax.set_xticks(range(len(template_ids)))
-    ax.set_xticklabels(template_ids, rotation=45, ha="right")
+    ax.set_xticklabels(template_ids, rotation=45, ha="right", fontsize=font_size)
+    ax.tick_params(axis="y", labelsize=font_size)
     style_axes(ax)
-    ax.legend(frameon=False)
+    ax.legend(frameon=False, fontsize=font_size)
     fig.tight_layout()
     fig.savefig(output_path, dpi=ctx.config["plotting"]["dpi"])
     plt.close(fig)

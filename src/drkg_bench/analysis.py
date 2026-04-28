@@ -13,6 +13,8 @@ from .reporting import fmt_int, fmt_num
 def run_postprocess(ctx: AppContext) -> None:
     print_status("Analysis: reading baseline, theory, comparison, and join-order tables")
     baseline_pg = read_csv_rows(ctx.path(ctx.config["paths"]["postgres_baseline_dir"]) / "postgres_baseline.csv")
+    duckdb_path = ctx.path(ctx.config["paths"].get("duckdb_baseline_dir", "")) / "duckdb_baseline.csv"
+    baseline_duck = read_csv_rows(duckdb_path) if duckdb_path.exists() else []
     baseline_neo = read_csv_rows(ctx.path(ctx.config["paths"]["neo4j_baseline_dir"]) / "neo4j_baseline.csv")
     theory_rows = read_csv_rows(ctx.path(ctx.config["paths"]["theory_dir"]) / "agm_bounds.csv")
     comparison_rows = read_csv_rows(ctx.path(ctx.config["paths"]["comparison_dir"]) / "engine_summary.csv")
@@ -24,7 +26,7 @@ def run_postprocess(ctx: AppContext) -> None:
     }
 
     instance_rows = []
-    for row in baseline_pg + baseline_neo:
+    for row in baseline_pg + baseline_duck + baseline_neo:
         theory = theory_index.get((row["tid"], row["reg"], row["bid"]), {})
         med_ms = _safe_float(row.get("med_ms", ""))
         work = _safe_float(row.get("work", ""))
@@ -93,6 +95,7 @@ def run_postprocess(ctx: AppContext) -> None:
         summary_dir / "summary_metrics.json",
         {
             "postgres_baseline_instances": len(baseline_pg),
+            "duckdb_baseline_instances": len(baseline_duck),
             "neo4j_baseline_instances": len(baseline_neo),
             "theory_instances": len(theory_rows),
             "comparison_rows": len(comparison_rows),

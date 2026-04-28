@@ -18,12 +18,15 @@ paths:
   env_dir: results/01_setup
   preprocess_dir: results/02_prepare/preprocess
   load_postgres_dir: results/02_prepare/load_postgres
+  load_duckdb_dir: results/02_prepare/load_duckdb
   load_neo4j_dir: results/02_prepare/load_neo4j
   template_mining_dir: results/02_prepare/template_mining
   bindings_dir: results/02_prepare/bindings
   prepare_figures_dir: results/02_prepare/figures
   postgres_baseline_dir: results/03_experiments/postgres_baseline
+  duckdb_baseline_dir: results/03_experiments/duckdb_baseline
   neo4j_baseline_dir: results/03_experiments/neo4j_baseline
+  reachability_dir: results/03_experiments/reachability
   comparison_dir: results/03_experiments/engine_comparison
   join_order_dir: results/03_experiments/postgres_join_order
   experiments_figures_dir: results/03_experiments/figures
@@ -46,6 +49,13 @@ postgres:
   maintenance_work_mem: 2GB
   effective_cache_size: 16GB
   nondefault_planner_settings: {}
+
+duckdb:
+  database_path: results/02_prepare/load_duckdb/drkg.duckdb
+  memory_limit: 8GB
+  threads: 4
+  measured_runs: 3
+  warmup_runs: 1
 
 neo4j:
   uri: bolt://localhost:7687
@@ -84,7 +94,7 @@ templates:
   length4_exact_eval_timeout_sec: 60
   length4_timeout_streak_limit: 8
   select_num_triangles: 2
-  select_four_cycle_if_available: false
+  select_four_cycle_if_available: true
   ranking:
     - grounded_match_count_desc
     - valid_anchor_count_desc
@@ -110,6 +120,15 @@ benchmark:
   preserve_timing_if_only_instrumented_fails: true
   log_csv: true
   log_failure_details: true
+
+reachability:
+  depths:
+    - 2
+    - 3
+  anchors_per_regime: 5
+  timeout_sec: 30
+  measured_runs: 1
+  neo4j_max_setup_seconds: 3600
 
 system:
   page_cache_flush_command: null

@@ -39,6 +39,7 @@ def regime_label(value: str) -> str:
 def engine_label(value: str) -> str:
     mapping = {
         "postgres": "pg",
+        "duckdb": "duck",
         "neo4j": "neo",
     }
     return mapping.get(value, value)

@@ -1,4 +1,5 @@
 PyYAML>=6.0.2
+duckdb>=1.2.0
 psycopg[binary]>=3.2.1
 neo4j>=5.28.1
 matplotlib>=3.9.2
