@@ -21,6 +21,14 @@ The benchmark uses the [Drug Repurposing Knowledge Graph (DRKG)](https://github.
 
 DRKG is stored as `(h, r, t)` triplets: `h` is the head/source entity, `r` is the relation type, and `t` is the tail/target entity. For example, a drug-repurposing edge has the form `(Compound, relation_type, Disease)`, such as `(Compound:Remdesivir, treats, Disease:COVID-19)` conceptually.
 
+| Head (source entity) | Relation (interaction type) | Tail (target entity) | Conceptual meaning |
+| --- | --- | --- | --- |
+| `Compound::DB01113` | `DRUGBANK::treats::Compound:Disease` | `Disease::DOID:8778` | A specific drug is known to treat a specific disease. |
+| `Gene::7157` | `STRING::interacts::Gene:Gene` | `Gene::53` | A specific gene has a protein-protein interaction with another gene. |
+| `Compound::DB00316` | `Hetionet::causes::Compound:SideEffect` | `Side Effect::C0027497` | A chemical compound causes a known side effect. |
+| `Disease::DOID:10652` | `GNBR::presents::Disease:Symptom` | `Symptom::D003371` | A specific disease presents a recognized clinical symptom. |
+| `Anatomy::UBERON:0002048` | `Hetionet::expresses::Anatomy:Gene` | `Gene::351` | A specific anatomical structure expresses a certain gene. |
+
 The pipeline treats `data/drkg.tsv` as the authoritative directed edge list over biomedical entity types such as compounds, diseases, genes, anatomy, pathways, and side effects. Metadata files such as the relation glossary and entity-source table are used for context, not for changing edge direction. During preprocessing, the project:
 
 - derives each node type from the prefix before `::`
