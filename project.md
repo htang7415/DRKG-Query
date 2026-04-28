@@ -6,7 +6,7 @@ Compare Neo4j and PostgreSQL on matched conjunctive-query workloads derived from
 
 ## 2. Hypothesis
 
-Acyclic templates should be more stable than cyclic templates under the same number of joins. Hub-anchored queries should increase intermediate expansion in both systems. Neo4j may do well on path-style traversals, while PostgreSQL may recover on some cyclic queries when join order is favorable. Yannakakis and worst-case optimal joins are used only as analytic reference points, not as claims about either system's implementation.
+The executed results support the parts of the hypothesis about skew and join-order sensitivity, but not the simple structural claim that acyclic templates are more stable than cyclic templates. Hub-anchored queries are consistently slower than uniform-random queries. The selected 3-edge path is much more expensive and failure-prone than the selected triangle templates because of large output and intermediate sizes. PostgreSQL is faster than Neo4j on all summarized template-regime pairs in this run, and PostgreSQL join-order experiments show that disconnected, cross-product-inducing orders can time out. Yannakakis and worst-case optimal joins are used only as analytic reference points, not as claims about either system's implementation.
 
 ## 3. Systems and Reproducibility
 
@@ -207,11 +207,7 @@ For each template:
 - Compute the tightest AGM-style upper bound after the same relation filters and anchor binding by solving for the optimal fractional edge cover of the filtered join hypergraph; note separately that pairwise-distinctness predicates can only reduce the true result size
 - Compare runtime and intermediate expansion against that bound
 
-The most direct structure comparison is:
-
-- 3-edge path vs triangle for the same join count
-
-The executed project compares the 3-edge path against the two selected triangle templates. No 4-edge path or 4-cycle comparison is present in the saved results.
+The executed project compares the 3-edge path against the two selected triangle templates. In these results, the acyclic 3-edge path is slower and less stable than the cyclic triangle templates, so the observed behavior is better explained by skew, output size, and intermediate work than by acyclic/cyclic structure alone. No 4-edge path or 4-cycle comparison is present in the saved results.
 
 ## 10. Join-Order Study in PostgreSQL
 
@@ -259,4 +255,4 @@ The final package contains:
 
 ## 12. Expected Contribution
 
-A controlled comparison of Neo4j and PostgreSQL on the executed DRKG path and triangle conjunctive-query workloads, with results explained through query structure, AGM bounds, skew, PostgreSQL execution behavior, and PostgreSQL join-order sensitivity. Neo4j timing results are included, while Neo4j plan-work metrics are treated as unavailable for this run because the saved `PROFILE` passes failed runtime verification.
+A controlled comparison of Neo4j and PostgreSQL on the executed DRKG path and triangle conjunctive-query workloads. The main findings are that hub anchors and poor PostgreSQL join orders substantially increase runtime, the selected 3-edge path is harder than the selected triangles despite being acyclic, and PostgreSQL is faster than Neo4j on the summarized timed results. Neo4j timing results are included, while Neo4j plan-work metrics are unavailable because the saved `PROFILE` passes failed runtime verification.
