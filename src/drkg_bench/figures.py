@@ -52,41 +52,40 @@ def _structure_runtime_figure(path: Path, rows: list[dict[str, str]], *, dpi: in
         return
     engines = [eng for eng in ["pg", "duck", "neo"] if any(row["eng"] == eng for row in rows)]
     regimes = [reg for reg in ["uniform", "hub"] if any(row["reg"] == reg for row in rows)]
-    fig, axes = plt.subplots(1, len(engines), figsize=(max(12, len(engines) * 4.2), 5.4), squeeze=False)
+    shapes = ["acyclic", "cyclic"]
+    fig, axes = plt.subplots(1, len(regimes), figsize=(max(11, len(regimes) * 5.4), 5.6), squeeze=False)
 
-    legend_handles = None
-    for axis, eng in zip(axes[0], engines, strict=True):
-        eng_rows = [row for row in rows if row["eng"] == eng]
-        x_values = np.arange(len(regimes))
-        width = 0.34
-        handles = []
-        for index, shape in enumerate(["acyclic", "cyclic"]):
+    legend_handles = []
+    for axis, reg in zip(axes[0], regimes, strict=True):
+        x_values = np.arange(len(shapes))
+        width = 0.24
+        for eng_index, eng in enumerate(engines):
             values = []
-            for reg in regimes:
-                matched = next((row for row in eng_rows if row["reg"] == reg and row["shape"] == shape), None)
+            for shape in shapes:
+                matched = next((row for row in rows if row["eng"] == eng and row["reg"] == reg and row["shape"] == shape), None)
                 values.append(float(matched["med_ms"]) if matched and matched["med_ms"] else np.nan)
             bar_container = axis.bar(
-                x_values + (-width / 2 if index == 0 else width / 2),
+                x_values + (eng_index - (len(engines) - 1) / 2) * width,
                 values,
                 width=width,
-                color=NATURE_PALETTE["acyclic" if shape == "acyclic" else "cyclic"],
-                label=shape,
+                color=_engine_color(eng),
+                label=eng,
             )
-            handles.append(bar_container)
-        legend_handles = handles
+            if reg == regimes[0]:
+                legend_handles.append(bar_container)
         axis.set_yscale("log")
         axis.set_ylabel("Runtime (ms, log scale)")
         axis.set_xticks(x_values)
-        axis.set_xticklabels(regimes)
-        axis.set_title(eng, loc="left", fontsize=_font_size())
+        axis.set_xticklabels(shapes)
+        axis.set_title(reg, loc="left", fontsize=_font_size())
         style_axes(axis)
 
     if legend_handles:
         fig.legend(
             legend_handles,
-            ["acyclic", "cyclic"],
+            engines,
             loc="upper center",
-            ncol=2,
+            ncol=len(engines),
             bbox_to_anchor=(0.5, 1.00),
         )
     fig.tight_layout(rect=(0, 0, 1, 0.94))
