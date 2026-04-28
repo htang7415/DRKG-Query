@@ -49,13 +49,34 @@ bash scripts/_run_cli.sh verify-results --config config.yaml
 
 ## Key Results
 
-- The saved full run uses `5,874,229` unique DRKG edges, `97,237` nodes, and `107` relations.
-- The fixed-query benchmark has `600` matched instances across five templates, two sampling regimes, and three engines.
-- DuckDB is fastest on most fixed-query slices, showing the strength of a modern in-process columnar SQL engine on these joins.
-- PostgreSQL is faster than Neo4j on most fixed-query slices, but Neo4j has lower medians on a few slices such as `C4 / hub`.
-- Hub-anchored queries are consistently harder than uniform-random queries, confirming that skew and anchor choice dominate runtime.
-- The acyclic `P3` path is the main stress case. It is much slower and less stable than the triangle and 4-cycle templates, so acyclic structure alone does not predict easy execution.
-- PostgreSQL join order matters: cross-product-inducing orders for `P3` time out on every attempted binding, while connected/default orders often complete.
-- Bounded reachability is anchor-dominated. Hub anchors expand to tens of thousands of reachable nodes, while uniform anchors usually remain tiny.
+The saved full run uses `5,874,229` unique DRKG edges, `97,237` nodes, and `107` relations. The fixed-query benchmark has `600` matched instances across five templates, two sampling regimes, and three engines.
 
-The resulting story is practical: runtime is driven by skew, output size, and intermediate expansion more than by the acyclic-versus-cyclic label alone.
+| Result slice | PostgreSQL median | Neo4j median | DuckDB median | Takeaway |
+| --- | ---: | ---: | ---: | --- |
+| `P3 / hub` | `40,905.420 ms` | `39,399.389 ms` | `1,826.620 ms` | `P3` is the stress case; DuckDB handles it much better. |
+| `P3 / uniform` | `106.576 ms` | `213.775 ms` | `42.602 ms` | Removing hub skew reduces runtime sharply. |
+| `C4 / hub` | `42.764 ms` | `18.733 ms` | `12.468 ms` | Cyclic does not automatically mean harder. |
+| `T1 / uniform` | `3.383 ms` | `28.538 ms` | `16.086 ms` | PostgreSQL is very strong on small selective joins. |
+
+![Engine runtime comparison](results/05_final/final_figures/2_engine_runtime.png)
+
+The cross-engine result is not a simple graph-versus-SQL story. DuckDB is fastest on most fixed-query slices, PostgreSQL beats Neo4j on most slices, and Neo4j has a few lower medians such as `C4 / hub`.
+
+![Acyclic versus cyclic runtime](results/05_final/final_figures/3_structure_runtime.png)
+
+The structural result is the main lesson: the acyclic `P3` path is much harder than the triangle and 4-cycle workloads. Runtime follows skew, output size, and intermediate expansion more than the acyclic-versus-cyclic label.
+
+![PostgreSQL join-order effect](results/05_final/final_figures/5_join_order_effect.png)
+
+PostgreSQL join order matters. For `P3`, cross-product-inducing forced orders time out on every attempted binding, while connected/default orders often complete.
+
+| Reachability slice | Reachable median | PostgreSQL | Neo4j | DuckDB | Takeaway |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Hub, depth 2 | `45,992` | `726.589 ms` | `337.748 ms` | `280.192 ms` | Hub anchors expand broadly. |
+| Hub, depth 3 | `64,843` | `1,860.033 ms` | `595.506 ms` | `814.463 ms` | Deeper hub expansion dominates runtime. |
+| Uniform, depth 2 | `3` | `2.083 ms` | `17.152 ms` | `4.345 ms` | Uniform anchors stay tiny. |
+| Uniform, depth 3 | `3` | `0.831 ms` | `11.459 ms` | `2.891 ms` | Anchor choice matters more than depth here. |
+
+![Bounded reachability runtime](results/05_final/final_figures/6_reachability_runtime.png)
+
+The resulting storyline is practical: benchmark difficulty is driven by skew, output size, and intermediate expansion more than by graph shape alone.
