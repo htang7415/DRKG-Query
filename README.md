@@ -86,6 +86,16 @@ Verify an existing full run:
 bash scripts/_run_cli.sh verify-results --config config.yaml
 ```
 
+## Experiments
+
+The full benchmark has three experiment groups:
+
+| Experiment | Scope | Purpose |
+| --- | --- | --- |
+| Fixed-query engine comparison | PostgreSQL, Neo4j, and DuckDB on `P2`, `P3`, `T1`, `T2`, and `C4` under hub and uniform anchors | Compare row-store SQL, graph traversal, and columnar SQL on matched conjunctive queries. |
+| PostgreSQL join-order study | Default, connected-prefix, and cross-product-inducing left-deep orders for `P3`, `T1`, and `T2` | Measure how much join order and intermediate expansion affect runtime. |
+| Bounded reachability | Depth-2 and depth-3 directional expansion from hub and uniform anchors on all three engines | Compare recursive/path-expansion behavior beyond fixed typed joins. |
+
 ## Key Results
 
 The fixed-query benchmark has `600` matched instances across five templates, two sampling regimes, and three engines.
